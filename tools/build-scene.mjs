@@ -160,10 +160,15 @@ function main() {
     primary: 4, secondary: 2, tertiary: 2, primary_link: 2, secondary_link: 2,
     residential: 2, unclassified: 2, service: 1, footway: 0, steps: 0, cycleway: 0,
   };
+  // 考据：A 区内部道路几乎没有正式路名，唯一确认的是沿江路（官方称临江路）
+  const ROAD_NAMES = { 569007954: '沿江路', 569007907: '沿江路' };
   const roads = [];
+  const seenRoad = new Set();
   for (const el of [...roadsRaw, ...campusRaw.filter((e) => e.tags?.highway)]) {
     const t = el.tags || {};
     if (!t.highway) continue;
+    if (seenRoad.has(el.id)) continue;
+    seenRoad.add(el.id);
     const pts = (el.geometry || []).map((p) => [p.lon, p.lat]);
     if (pts.length < 2) continue;
     if (!t.highway.match(/primary|secondary|tertiary|unclassified|service|residential|footway|steps|cycleway/)) continue;
@@ -171,7 +176,7 @@ function main() {
     const width = Number(t.width) || (lanes > 0 ? lanes * 3.25 + 1.0 : 2.4);
     roads.push({
       id: 'r' + el.id,
-      name: t.name || '',
+      name: t.name || ROAD_NAMES[el.id] || '',
       nameEn: t['name:en'] || '',
       cls: t.highway,
       lanes,
