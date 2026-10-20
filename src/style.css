@@ -343,3 +343,29 @@ html[data-theme='night'] .hint { color: #93a3b3; }
   color: var(--accent);
 }
 html[data-theme='night'] .card-extra p { color: #b7c3cf; }
+
+
+/* ---------- 工具栏 ---------- */
+.tools {
+  position: absolute;
+  left: 22px;
+  top: 96px;
+  z-index: 13;
+}
+.tool-btn {
+  appearance: none;
+  border: 1px solid var(--line);
+  background: var(--card);
+  color: #33424f;
+  font: inherit;
+  font-size: 12.5px;
+  letter-spacing: 0.08em;
+  padding: 8px 16px;
+  border-radius: 999px;
+  cursor: pointer;
+  backdrop-filter: blur(8px);
+  box-shadow: 0 2px 10px rgba(31, 42, 51, 0.06);
+}
+.tool-btn:hover { border-color: var(--accent); color: var(--accent); }
+.tool-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+.guides { top: 144px !important; }

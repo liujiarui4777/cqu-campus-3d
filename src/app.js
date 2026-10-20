@@ -79,6 +79,7 @@ import { addLandmarks } from './landmarks.js';
 import { createBasemapProvider } from './basemap.js';
 import { initInteraction } from './ui.js';
 import { addTrees } from './trees.js';
+import { buildRoadGraph, nearestNode, shortestPath } from './nav.js';
 
 (async () => {
   try {
@@ -106,8 +107,9 @@ import { addTrees } from './trees.js';
       dom.stats.innerHTML = `<span>${data.buildings.length} 栋建筑</span><span>${data.roads.length} 条道路</span><span>${data.areas.length} 处场地</span>`;
     }
     if (dom.boot) dom.boot.style.display = 'none';
-    initInteraction(viewer, data, terrain);
-    window.__CQU__ = { viewer, data, terrain };
+    const graph = buildRoadGraph(data.roads);
+    initInteraction(viewer, data, terrain, graph);
+    window.__CQU__ = { viewer, data, terrain, graph, nav: { nearestNode, shortestPath } };
   } catch (e) {
     showError(e);
   }

@@ -1,3 +1,4 @@
+import { nearestNode, shortestPath } from './nav.js';
 /* 交互：点击建筑 → 信息卡；地标导览；昼夜主题 */
 
 const Cesium = window.Cesium;
@@ -13,7 +14,7 @@ const KIND_LABEL = {
   landmark: '地标',
 };
 
-export function initInteraction(viewer, data, terrain) {
+export function initInteraction(viewer, data, terrain, graph) {
   const card = document.getElementById('card');
   const cardTitle = document.getElementById('card-title');
   const cardSub = document.getElementById('card-sub');
@@ -89,10 +90,72 @@ export function initInteraction(viewer, data, terrain) {
     });
   }
 
+  /* ---------- 步行导航 ---------- */
+  let navMode = false;
+  let navFrom = null;
+  let navLine = null;
+  const hintEl = document.querySelector('.hint');
+  const baseHint = hintEl ? hintEl.firstChild.textContent : '';
+  function setHint(text) {
+    if (!hintEl) return;
+    hintEl.innerHTML = text + '<span class="credit-line">建筑轮廓 © OpenStreetMap 贡献者（ODbL） · 地形 AWS Terrain Tiles · 考据：重庆市文旅委 / 重庆大学公开资料</span>';
+  }
+  const navBtn = document.getElementById('nav-btn');
+  const navMod = {};
+
+  function clearNavLine() {
+    if (navLine) {
+      viewer.entities.remove(navLine);
+      navLine = null;
+    }
+  }
+
+  if (navBtn) {
+    navBtn.addEventListener('click', () => {
+      navMode = !navMode;
+      navBtn.classList.toggle('active', navMode);
+      navFrom = null;
+      clearNavLine();
+      setHint(navMode ? '导航模式：先点击起点建筑' : '点击建筑查看详情 · 左键拖拽旋转 · 滚轮缩放 · 右键平移');
+    });
+  }
+
   const handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
   handler.setInputAction((movement) => {
     const picked = viewer.scene.pick(movement.position);
     if (Cesium.defined(picked) && picked.id && picked.id.properties) {
+      if (navMode && graph) {
+        const b = picked.id.properties.data.getValue();
+        if (b) {
+          if (!navFrom) {
+            navFrom = b;
+            setHint('起点：' + b.name + '，再点击终点建筑');
+          } else {
+            const s = nearestNode(graph, navFrom.center[0], navFrom.center[1]);
+            const t = nearestNode(graph, b.center[0], b.center[1]);
+            const res = shortestPath(graph, s.id, t.id);
+            clearNavLine();
+            if (res) {
+              const arr = [];
+              for (const n of res.path) arr.push(n.lon, n.lat);
+              navLine = viewer.entities.add({
+                polyline: {
+                  positions: Cesium.Cartesian3.fromDegreesArray(arr),
+                  width: 6,
+                  material: Cesium.Color.fromCssColorString('#2f6f6a'),
+                  clampToGround: true,
+                },
+              });
+              const min = Math.max(1, Math.round(res.length / 78));
+              setHint('步行 ' + Math.round(res.length) + ' m，约 ' + min + ' 分钟（' + navFrom.name + ' → ' + b.name + '）');
+            } else {
+              setHint('这两点之间没有找到步行路线');
+            }
+            navFrom = null;
+          }
+          return;
+        }
+      }
       show(picked.id);
     } else {
       hide();

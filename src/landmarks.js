@@ -226,6 +226,107 @@ export function addLandmarks(viewer, data, terrain) {
     });
   }
 
+  /* ---------- 坡屋顶：给民国建筑的平顶换成双坡瓦屋面 ---------- */
+  for (const b of data.buildings || []) {
+    if (b.roof !== 'hip' && b.roof !== 'gable') continue;
+    if (!b.outline || b.outline.length < 3) continue;
+    const hEave = terrain.sample(b.center[0], b.center[1]) + b.height;
+    let minLon = Infinity, maxLon = -Infinity, minLat = Infinity, maxLat = -Infinity;
+    for (const [lo, la] of b.outline) {
+      minLon = Math.min(minLon, lo); maxLon = Math.max(maxLon, lo);
+      minLat = Math.min(minLat, la); maxLat = Math.max(maxLat, la);
+    }
+    const pad = 0.00012;
+    minLon -= pad; maxLon += pad; minLat -= pad; maxLat += pad;
+    const rise = Math.min(3.4, Math.max(1.8, (maxLon - minLon) * 40000));
+    const hRidge = hEave + rise;
+    const midLat = (minLat + maxLat) / 2;
+    const midLon = (minLon + maxLon) / 2;
+    const longAxisLon = (maxLon - minLon) * Math.cos((midLat * Math.PI) / 180) > (maxLat - minLat);
+    const mat = cr(b.roofColor || '#5f6462');
+
+    const quads = longAxisLon
+      ? [
+          [[minLon, minLat, hEave], [maxLon, minLat, hEave], [maxLon, midLat, hRidge], [minLon, midLat, hRidge]],
+          [[maxLon, maxLat, hEave], [minLon, maxLat, hEave], [minLon, midLat, hRidge], [maxLon, midLat, hRidge]],
+          [[maxLon, minLat, hEave], [maxLon, maxLat, hEave], [maxLon, midLat, hRidge]],
+          [[minLon, maxLat, hEave], [minLon, minLat, hEave], [minLon, midLat, hRidge]],
+        ]
+      : [
+          [[minLon, minLat, hEave], [minLon, maxLat, hEave], [midLon, maxLat, hRidge], [midLon, minLat, hRidge]],
+          [[maxLon, maxLat, hEave], [maxLon, minLat, hEave], [midLon, minLat, hRidge], [midLon, maxLat, hRidge]],
+          [[minLon, maxLat, hEave], [maxLon, maxLat, hEave], [midLon, maxLat, hRidge]],
+          [[maxLon, minLat, hEave], [minLon, minLat, hEave], [midLon, minLat, hRidge]],
+        ];
+
+    for (const poly of quads) {
+      const arr = [];
+      for (const [lo, la, h] of poly) arr.push(lo, la, h);
+      E.add({
+        polygon: {
+          hierarchy: Cesium.Cartesian3.fromDegreesArrayHeights(arr),
+          perPositionHeight: true,
+          material: mat,
+          outline: false,
+        },
+        properties: { kind: 'landmark', name: (b.name || '') + ' 坡屋顶' },
+      });
+    }
+  }
+
+  /* ---------- 民国建筑细节：理学院屋顶攒尖亭、工学院六边形塔楼 ---------- */
+  const sci = (data.buildings || []).find((b) => b.name === '理学院');
+  if (sci) {
+    const h0 = terrain.sample(sci.center[0], sci.center[1]) + sci.height;
+    // 重檐八角攒尖小亭（屋脊正中的"宝塔"）
+    E.add({
+      position: Cesium.Cartesian3.fromDegrees(sci.center[0], sci.center[1], h0 + 1.6),
+      cylinder: {
+        length: 3.2,
+        topRadius: 1.2,
+        bottomRadius: 2.3,
+        material: cr('#6a6f6b'),
+      },
+      properties: { kind: 'landmark', name: '理学院屋顶攒尖亭' },
+    });
+    E.add({
+      position: Cesium.Cartesian3.fromDegrees(sci.center[0], sci.center[1], h0 + 3.9),
+      cylinder: {
+        length: 2.0,
+        topRadius: 0.12,
+        bottomRadius: 1.5,
+        material: cr('#5f6462'),
+      },
+      properties: { kind: 'landmark', name: '理学院屋顶攒尖亭' },
+    });
+  }
+
+  const eng = (data.buildings || []).find((b) => b.name === '工学院');
+  if (eng) {
+    const h0 = terrain.sample(eng.center[0], eng.center[1]);
+    // 六边形塔楼：贯通四层，比主体略高
+    E.add({
+      position: Cesium.Cartesian3.fromDegrees(eng.center[0], eng.center[1], h0 + (eng.height + 4) / 2),
+      cylinder: {
+        length: eng.height + 4,
+        topRadius: 3.4,
+        bottomRadius: 3.6,
+        material: cr('#c2bbaa'),
+      },
+      properties: { kind: 'landmark', name: '工学院六边形塔楼' },
+    });
+    E.add({
+      position: Cesium.Cartesian3.fromDegrees(eng.center[0], eng.center[1], h0 + eng.height + 4.6),
+      cylinder: {
+        length: 1.4,
+        topRadius: 3.8,
+        bottomRadius: 3.8,
+        material: cr('#5f6462'),
+      },
+      properties: { kind: 'landmark', name: '工学院塔楼屋面' },
+    });
+  }
+
   /* ---------- 思群广场：400m 标准跑道 ---------- */
   const track = data.track;
   if (track) {

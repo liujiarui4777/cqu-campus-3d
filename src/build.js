@@ -151,7 +151,7 @@ export function addAreas(viewer, data, terrain) {
         id: 'water:' + a.id,
         polygon: {
           hierarchy: new Cesium.PolygonHierarchy(ringPositions(Cesium, a.outline, 0)),
-          height: h0 + 0.35,
+          height: h0 + 0.12,
           material: Cesium.Color.fromCssColorString(a.color).withAlpha(0.96),
           outline: false,
         },
