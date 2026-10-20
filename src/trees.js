@@ -124,7 +124,7 @@ export function addTrees(viewer, data, terrain) {
     vertexFormat: Cesium.PerInstanceColorAppearance.VERTEX_FORMAT,
   });
   const crownGeo = new Cesium.EllipsoidGeometry({
-    radii: new Cesium.Cartesian3(2.2, 2.2, 2.7),
+    radii: new Cesium.Cartesian3(3.0, 3.0, 3.6),
     vertexFormat: Cesium.PerInstanceColorAppearance.VERTEX_FORMAT,
   });
 
@@ -142,14 +142,14 @@ export function addTrees(viewer, data, terrain) {
       }),
     );
 
-    const cm = Cesium.Matrix4.multiplyByTranslation(enu, new Cesium.Cartesian3(0, 0, 4.4), new Cesium.Matrix4());
+    const cm = Cesium.Matrix4.multiplyByTranslation(enu, new Cesium.Cartesian3(0, 0, 5.2), new Cesium.Matrix4());
     crowns.push(
       new Cesium.GeometryInstance({
         geometry: crownGeo,
         modelMatrix: cm,
         attributes: {
           color: Cesium.ColorGeometryInstanceAttribute.fromColor(
-            Cesium.Color.fromCssColorString(t.s > 1.05 ? '#8aa873' : '#7b9a66'),
+            Cesium.Color.fromCssColorString(t.s > 1.05 ? '#84a06d' : '#6d8c58'),
           ),
         },
       }),

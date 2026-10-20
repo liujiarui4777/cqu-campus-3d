@@ -259,6 +259,21 @@ export function addLandmarks(viewer, data, terrain) {
       },
       properties: { kind: 'landmark', name: '思群广场 400m 跑道' },
     });
+    // 内场草地（覆盖跑道内侧，形成环形观感）
+    const innerOutline = trackRing(R, L, 0, 28, true).map(([x, y]) => {
+      const [rx, ry] = rotate(x, y, bearing);
+      return offset(clon, clat, rx, ry);
+    });
+    const innerFlat = [];
+    for (const [lo, la] of innerOutline) innerFlat.push(lo, la);
+    E.add({
+      polygon: {
+        hierarchy: Cesium.Cartesian3.fromDegreesArray(innerFlat),
+        height: h0 + 0.34,
+        material: cr('#6f9a5e'),
+      },
+      properties: { kind: 'landmark', name: '思群广场内场' },
+    });
   }
 }
 
