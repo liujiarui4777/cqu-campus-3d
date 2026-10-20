@@ -60,6 +60,56 @@ export function addBuildings(viewer, data, terrain) {
       properties: { kind: 'building', data: b },
     });
 
+    // 基座：底部一段深色，让楼"立"在地面上
+    const wallC = Cesium.Color.fromCssColorString(b.wall || '#e1dcd0');
+    const dark = new Cesium.Color(wallC.red * 0.86, wallC.green * 0.86, wallC.blue * 0.86, 1, wallC._colorSpace);
+    const baseH = Math.min(4.2, Math.max(1.2, (top - bottom) * 0.16));
+    store.add({
+      id: 'base:' + b.id,
+      polygon: {
+        hierarchy,
+        height: bottom,
+        extrudedHeight: bottom + baseH,
+        material: dark,
+        outline: false,
+      },
+      properties: { kind: 'building', data: b },
+    });
+
+    // 窗带：沿立面每隔若干层一条深色薄环（外扩 0.12m 避免共面闪烁）
+    if (top - bottom > 10 && b.levels >= 3) {
+      const mLon = 111320 * Math.cos((b.center[1] * Math.PI) / 180);
+      const MLAT = 110540;
+      const cx = b.center[0];
+      const cy = b.center[1];
+      const exp = b.outline.map(([lon, lat]) => {
+        const dx = (lon - cx) * mLon;
+        const dy = (lat - cy) * MLAT;
+        const len = Math.hypot(dx, dy) || 1;
+        return [lon + ((dx / len) * 0.14) / mLon, lat + ((dy / len) * 0.14) / MLAT];
+      });
+      const expPos = [];
+      for (const [lo, la] of exp) expPos.push(lo, la);
+      const expHierarchy = Cesium.Cartesian3.fromDegreesArray(expPos);
+      const bands = Math.max(1, Math.min(6, Math.floor(b.levels / 2)));
+      const span = top - bottom;
+      const glass = Cesium.Color.fromCssColorString('#7d8b96');
+      for (let i = 1; i <= bands; i++) {
+        const y = bottom + (span * i) / (bands + 1);
+        store.add({
+          id: 'win:' + b.id + ':' + i,
+          polygon: {
+            hierarchy: expHierarchy,
+            height: y,
+            extrudedHeight: y + Math.min(1.5, span / (bands + 1) * 0.5),
+            material: glass,
+            outline: false,
+          },
+          properties: { kind: 'building', data: b },
+        });
+      }
+    }
+
     // 屋顶面：单独一层薄面，保证屋顶色与墙面色分开
     store.add({
       id: 'r:' + b.id,
@@ -95,7 +145,20 @@ export function addAreas(viewer, data, terrain) {
       },
       id: { kind: 'area', id: a.id },
     });
-    if (a.kind === 'water') water.push(inst);
+    if (a.kind === 'water') {
+      const h0 = terrain.sample(a.center[0], a.center[1]);
+      viewer.entities.add({
+        id: 'water:' + a.id,
+        polygon: {
+          hierarchy: new Cesium.PolygonHierarchy(ringPositions(Cesium, a.outline, 0)),
+          height: h0 + 0.35,
+          material: Cesium.Color.fromCssColorString(a.color).withAlpha(0.96),
+          outline: false,
+        },
+        properties: { kind: 'area', name: a.name || '水面' },
+      });
+      continue;
+    }
     else if (a.kind === 'green') green.push(inst);
     else if (a.kind === 'pitch') pitch.push(inst);
   }
