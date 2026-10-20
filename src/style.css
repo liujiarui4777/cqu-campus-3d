@@ -506,3 +506,27 @@ html[data-theme='night'] .schedule textarea {
   color: #e2eaf2;
   border-color: rgba(255, 255, 255, 0.12);
 }
+
+
+/* ---------------- 手机端 ---------------- */
+@media (max-width: 640px) {
+  .topbar { flex-wrap: wrap; gap: 8px; padding: 10px 12px; }
+  .brand h1 { font-size: 15px; }
+  .search { order: 3; max-width: none; flex-basis: 100%; margin: 0; }
+  .times button { padding: 5px 9px; }
+  .dock {
+    left: 8px;
+    right: 8px;
+    transform: none;
+    bottom: 10px;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 8px 10px;
+    animation: none;
+  }
+  .dock-actions { width: 100%; }
+  .dock-btn { flex: 1; padding: 8px 6px; text-align: center; }
+  .guides { order: 3; flex-basis: 100%; }
+  .card, .schedule { bottom: 132px; left: 8px; right: 8px; width: auto; }
+  .card h2 { font-size: 18px; }
+}
