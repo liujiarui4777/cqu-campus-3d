@@ -1,0 +1,29 @@
+{
+  "name": "cqu-campus-3d",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "重庆大学 A 区三维校园地图（CesiumJS）",
+  "scripts": {
+    "dev": "vite --port 5181",
+    "build": "vite build",
+    "preview": "vite preview --port 5181",
+    "typecheck": "tsc --noEmit",
+    "scene": "node tools/build-scene.mjs"
+  },
+  "dependencies": {
+    "cesium": "^1.146.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "zustand": "^5.0.15"
+  },
+  "devDependencies": {
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^4.3.4",
+    "three": "^0.186.1",
+    "typescript": "^7.0.2",
+    "vite": "^6.3.5",
+    "vite-plugin-static-copy": "^4.1.1"
+  }
+}
