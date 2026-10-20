@@ -84,6 +84,12 @@ const KNOWN_B = {
   '女生公寓': { levels: 6, height: 19.0, roof: 'flat', wall: '#dcc8a5', roofColor: '#b7a184', desc: 'B 区女生公寓。' },
 };
 
+// ---------- C 区（原重庆建筑高等专科学校，2000 年并入重庆大学） ----------
+const KNOWN_C = {
+  '校友会': { levels: 1, height: 5.5, roof: 'flat', wall: '#d3c3ae', roofColor: '#9c9488', desc: 'C 区校友会，单层砖混用房。' },
+  '陶艺坊': { levels: 1, height: 5.0, roof: 'flat', wall: '#d3c3ae', roofColor: '#9c9488', desc: 'C 区陶艺坊，单层实践教学用房。' },
+};
+
 // 宿舍：按“X舍”匹配
 const dormInfo = { wall: '#dcc8a5', roofColor: '#b7a184' };
 
@@ -115,7 +121,7 @@ function buildBuilding(el, campus) {
   const name = t.name || t['name:zh'] || '';
   const ring = (el.geometry || []).map((p) => [p.lon, p.lat]);
   if (ring.length < 3) return null;
-  const known = (campus === 'B' ? KNOWN_B : KNOWN)[name] || null;
+  const known = (campus === 'B' ? KNOWN_B : campus === 'C' ? KNOWN_C : KNOWN)[name] || null;
   const dormLevels = DORM_LEVELS[name] || 0;
   const kind = known ? 'landmark' : classify(t, name);
   const lv = Number(t['building:levels']) || known?.levels || dormLevels || 0;
@@ -149,6 +155,13 @@ function buildBuilding(el, campus) {
   if (campus === 'B' && !known) {
     const tint = B_TINT[kind];
     if (tint) pal = { ...pal, ...tint };
+  }
+  if (campus === 'C' && !known) {
+    // C 区（原重庆建筑高等专科学校）偏暖灰砖
+    const cTint = kind === 'dorm'
+      ? { wall: '#d9c8ab', roof: '#b5a086', glass: '#5d696b', accent: '#c8b493' }
+      : { wall: '#d5c8b8', roof: '#9e978c', glass: '#5d696b', accent: '#c4b5a3' };
+    pal = { ...pal, ...cTint };
   }
   const wall = pal.wall || '#e1dcd0';
   const roofColor = pal.roofColor || pal.roof || '#a8a49b';
@@ -188,6 +201,44 @@ function bquRings() {
     .map((m) => m.geometry.map((p) => [Math.round(p.lon * 1e7) / 1e7, Math.round(p.lat * 1e7) / 1e7]));
 }
 
+// ---------- 几何：凸包 + 外扩（C 区边界用建筑群轮廓近似） ----------
+function convexHull(pts) {
+  const p = pts.slice().sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  if (p.length < 3) return p;
+  const cross = (o, a, b) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+  const lower = [];
+  for (const pt of p) {
+    while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], pt) <= 0) lower.pop();
+    lower.push(pt);
+  }
+  const upper = [];
+  for (let i = p.length - 1; i >= 0; i--) {
+    const pt = p[i];
+    while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], pt) <= 0) upper.pop();
+    upper.push(pt);
+  }
+  lower.pop();
+  upper.pop();
+  return lower.concat(upper);
+}
+
+function expandRing(ring, meters) {
+  if (ring.length < 3) return ring;
+  const cx = ring.reduce((s, p) => s + p[0], 0) / ring.length;
+  const cy = ring.reduce((s, p) => s + p[1], 0) / ring.length;
+  const kLon = 111320 * Math.cos((cy * Math.PI) / 180);
+  const kLat = 110540;
+  return ring.map(([lon, lat]) => {
+    const dx = (lon - cx) * kLon;
+    const dy = (lat - cy) * kLat;
+    const len = Math.hypot(dx, dy) || 1;
+    return [
+      Math.round((lon + ((dx / len) * meters) / kLon) * 1e7) / 1e7,
+      Math.round((lat + ((dy / len) * meters) / kLat) * 1e7) / 1e7,
+    ];
+  });
+}
+
 // ---------- 主流程 ----------
 function main() {
   const buildingsRaw = read('osm-buildings.json');
@@ -198,8 +249,17 @@ function main() {
   const bquRoadsRaw = read('osm-bqu-roads.json');
   const bquAreaRaw = read('osm-cqu-bqu.json');
 
+  // C 区（原重庆建筑高等专科学校）
+  const cBoundaryRaw = JSON.parse(fs.readFileSync(path.join(RAW, 'osm-cqu-c-boundary.json'), 'utf8')).elements;
+  const cWay = cBoundaryRaw.find((e) => e.type === 'way' && e.id === 412480747) || cBoundaryRaw.find((e) => e.type === 'way');
+  const ringC = cWay ? (cWay.geometry || []).map((p) => [p.lon, p.lat]) : [];
+  const cBuildingsRaw = read('osm-cqu-c-buildings.json');
+  const cRoadsRaw = read('osm-cqu-c-roads.json');
+  const cAreasRaw = read('osm-cqu-c-areas.json');
+
   const ringsB = bquRings();
   const inBqu = (lon, lat) => ringsB.some((r) => pointInPoly(lon, lat, r));
+  const inCqu = (lon, lat) => ringC.length > 3 && pointInPoly(lon, lat, ringC);
 
   // ---- A 区建筑 ----
   const buildings = buildingsRaw.map((el) => buildBuilding(el, 'A')).filter(Boolean);
@@ -218,6 +278,25 @@ function main() {
     const b = buildBuilding(el, 'B');
     if (!b) continue;
     // B 区无名教学/实验楼统一归为教学用房，避免“其他”色
+    if (!b.name && b.kind === 'other') b.kind = 'teach';
+    buildings.push(b);
+    seenIds.add(el.id);
+  }
+
+  // ---- C 区建筑：C 区面积小、OSM 边界只覆盖西半部，按实测楼群范围取 ----
+  const cBox = { west: 106.4462, south: 29.5598, east: 106.4535, north: 29.5662 };
+  let cquDropped = 0;
+  for (const el of cBuildingsRaw) {
+    if (!el.geometry || el.geometry.length < 3) continue;
+    if (seenIds.has(el.id)) continue;
+    const c = centroid(el.geometry.map((p) => [p.lon, p.lat]));
+    const inC = c[0] > cBox.west && c[0] < cBox.east && c[1] > cBox.south && c[1] < cBox.north;
+    if (!inC) {
+      cquDropped++;
+      continue;
+    }
+    const b = buildBuilding(el, 'C');
+    if (!b) continue;
     if (!b.name && b.kind === 'other') b.kind = 'teach';
     buildings.push(b);
     seenIds.add(el.id);
@@ -273,6 +352,17 @@ function main() {
   const bquPitch = bquAreaRaw.find((e) => e.id === 266636697);
   if (bquPitch) addArea(bquPitch, 'pitch');
 
+  // C 区场地（球场 / 绿地 / 水面）
+  for (const el of cAreasRaw) {
+    const t = el.tags || {};
+    let kind = null;
+    if (t.natural === 'water' || t.waterway === 'riverbank') kind = 'water';
+    else if (t.leisure === 'pitch' || t.leisure === 'stadium' || t.leisure === 'playground') kind = 'pitch';
+    else if (t.leisure === 'garden' || t.leisure === 'park' || t.landuse === 'grass' || t.landuse === 'forest') kind = 'green';
+    if (!kind) continue;
+    addArea(el, kind);
+  }
+
   // ---- 道路 ----
   // 车道数默认值参考《城市道路工程设计规范》常见断面：主干 4 车道、次干 2 车道、支路 2 车道、服务道 1 车道
   const lanesDefault = {
@@ -320,6 +410,11 @@ function main() {
     if (hw === 'motorway' || hw === 'motorway_link' || hw === 'construction') continue;
     pushRoad(el);
   }
+  for (const el of cRoadsRaw) {
+    const hw = el.tags?.highway;
+    if (hw === 'motorway' || hw === 'motorway_link' || hw === 'construction') continue;
+    pushRoad(el);
+  }
 
   // ---- 地标（人工参数，见 docs/调研-A区建筑资料.md）----
   const landmarks = [
@@ -357,9 +452,18 @@ function main() {
   const uni = campusRaw.find((e) => e.tags?.amenity === 'university' && /重庆大学A区/.test(e.tags?.name || ''))
     || campusRaw.find((e) => e.tags?.amenity === 'university' && /重庆大学/.test(e.tags?.name || ''));
   const boundaryA = uni ? (uni.geometry || []).map((p) => [p.lon, p.lat]) : [];
+  const avg = (arr, i) => (arr.length ? arr.reduce((s, c) => s + c[i], 0) / arr.length : null);
+  const cCenters = buildings.filter((b) => b.campus === 'C').map((b) => b.center);
+  const cCenter = cCenters.length
+    ? [avg(cCenters, 0), avg(cCenters, 1)].map((v) => Math.round(v * 1e7) / 1e7)
+    : centroid(ringC).map((v) => Math.round(v * 1e7) / 1e7);
+
   const boundaries = [];
   if (boundaryA.length > 3) boundaries.push({ name: '重庆大学A区', campus: 'A', coords: boundaryA });
   for (const r of ringsB) boundaries.push({ name: '重庆大学B区', campus: 'B', coords: r });
+  // C 区：OSM 边界只覆盖西半部，与实测楼群错位；用楼群凸包外扩 85 m 作示意边界
+  const ringCApprox = cCenters.length >= 3 ? expandRing(convexHull(cCenters), 85) : ringC;
+  if (ringCApprox.length > 3) boundaries.push({ name: '重庆大学C区', campus: 'C', coords: ringCApprox, approximate: true });
 
   const bquCenters = buildings.filter((b) => b.campus === 'B').map((b) => b.center);
   const bquCenter = bquCenters.length
@@ -376,11 +480,12 @@ function main() {
       sources: ['OpenStreetMap (ODbL)', '重庆市文旅委文物资料', '重庆大学官方资料'],
       center: [106.4615, 29.5695],
       bounds: { west: 106.4540, south: 29.5580, east: 106.4735, north: 29.5770 },
-      mapBounds: { west: 106.4099, south: 29.5243, east: 106.5131, north: 29.6147, sizeKm: 10 },
+      mapBounds: { west: 106.3840, south: 29.5017, east: 106.5390, north: 29.6373, sizeKm: 15 },
     },
     campuses: [
       { id: 'A', name: '重庆大学A区', address: '沙坪坝正街 174 号', center: [106.4648, 29.5672] },
       { id: 'B', name: '重庆大学B区', address: '沙正街 83 号（原重庆建筑大学）', center: bquCenter.map((v) => Math.round(v * 1e7) / 1e7) },
+      { id: 'C', name: '重庆大学C区', address: '沙坪坝（原重庆建筑高等专科学校）', center: cCenter },
     ],
     buildings,
     areas,
@@ -396,9 +501,10 @@ function main() {
   console.log(
     'buildings', buildings.length,
     '(A', buildings.filter((b) => b.campus === 'A').length,
-    '/ B', buildings.filter((b) => b.campus === 'B').length, ')',
+    '/ B', buildings.filter((b) => b.campus === 'B').length,
+    '/ C', buildings.filter((b) => b.campus === 'C').length, ')',
     '| areas', areas.length, '| roads', roads.length,
-    '| B 区边界外跳过', bquDropped,
+    '| B 区边界外跳过', bquDropped, '| C 区边界外跳过', cquDropped,
   );
   console.log('landmark buildings:', buildings.filter((b) => b.landmark).map((b) => b.name).join(', '));
   console.log('written', path.join(OUT, 'scene.json'));

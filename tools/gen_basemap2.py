@@ -70,19 +70,24 @@ def draw_roads(layer, roads, to_px, px_per_meter, aa_width=1.6):
 
 
 def draw_white_models(layer, models, to_px, px_per_meter, size):
-    """非重庆大学建筑：底图上的白模屋面（浅灰白块）"""
+    """非重庆大学建筑：底图上的白模屋面（浅灰白块，真实轮廓）"""
     d = ImageDraw.Draw(layer)
     for b in models:
-        # 用 bbox 的四个角近似屋面
-        lon, lat = b['lon'], b['lat']
-        w = b['w'] / (111320.0 * math.cos(math.radians(lat)))
-        h = b['d'] / 110540.0
-        pts = [
-            to_px(lon - w / 2, lat + h / 2),
-            to_px(lon + w / 2, lat + h / 2),
-            to_px(lon + w / 2, lat - h / 2),
-            to_px(lon - w / 2, lat - h / 2),
-        ]
+        if b.get('outline'):
+            pts = [to_px(lon, lat) for lon, lat in b['outline']]
+            if len(pts) < 3:
+                continue
+        else:
+            # 兼容旧的 bbox 数据
+            lon, lat = b['lon'], b['lat']
+            w = b['w'] / (111320.0 * math.cos(math.radians(lat)))
+            h = b['d'] / 110540.0
+            pts = [
+                to_px(lon - w / 2, lat + h / 2),
+                to_px(lon + w / 2, lat + h / 2),
+                to_px(lon + w / 2, lat - h / 2),
+                to_px(lon - w / 2, lat - h / 2),
+            ]
         d.polygon(pts, fill=(247, 246, 242, 232))
         d.line(pts + [pts[0]], fill=(214, 211, 204, 200), width=max(1, int(size / 4096)))
     return layer

@@ -1,6 +1,6 @@
-﻿import gzip, os, shutil
+import gzip, os, shutil
 DATA = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data')
-for name in ['terrain', 'terrain_coarse']:
+for name in ['terrain', 'terrain_mid', 'terrain_coarse']:
     src = os.path.join(DATA, name + '.bin')
     dst = src + '.gz'
     with open(src, 'rb') as f_in, gzip.open(dst, 'wb', compresslevel=9) as f_out:

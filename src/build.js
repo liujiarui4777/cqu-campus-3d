@@ -1,4 +1,4 @@
-﻿const MLAT = 110540;
+const MLAT = 110540;
 
 function ringWithHeights(Cesium, ring, terrain, offset) {
   const arr = [];
@@ -42,7 +42,9 @@ export function addBoundary(viewer, data, terrain) {
         }),
         attributes: {
           color: Cesium.ColorGeometryInstanceAttribute.fromColor(
-            Cesium.Color.fromCssColorString(bdr.campus === 'B' ? '#8a6a3f' : '#2f6f6a').withAlpha(0.9),
+            Cesium.Color.fromCssColorString(
+              bdr.campus === 'B' ? '#8a6a3f' : bdr.campus === 'C' ? '#7a5f9a' : '#2f6f6a',
+            ).withAlpha(0.9),
           ),
         },
       }),

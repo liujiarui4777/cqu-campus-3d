@@ -15,7 +15,6 @@ const QUADS = ['sw', 'se', 'nw', 'ne'];
 const seen = new Set();
 const roads = [];
 const areas = [];
-
 const lanesDefault = {
   motorway: 4, trunk: 4, primary: 4, secondary: 2, tertiary: 2,
   motorway_link: 2, trunk_link: 2, primary_link: 2, secondary_link: 2, tertiary_link: 2,
@@ -36,13 +35,18 @@ function areaKind(t) {
   return null;
 }
 
-for (const q of QUADS) {
-  const file = path.join(RAW, `10km-${q}.json`);
-  if (!fs.existsSync(file)) {
-    console.log('缺少', q, '（跳过）');
-    continue;
-  }
-  const j = JSON.parse(fs.readFileSync(file, 'utf8'));
+let files = fs
+  .readdirSync(RAW)
+  .filter((f) => /^15km-\d+\.json$/.test(f))
+  .sort();
+if (!files.length) {
+  files = fs
+    .readdirSync(RAW)
+    .filter((f) => /^10km-(sw|se\d?|nw|ne)\.json$/.test(f))
+    .sort();
+}
+for (const file of files) {
+  const j = JSON.parse(fs.readFileSync(path.join(RAW, file), 'utf8'));
   for (const el of j.elements || []) {
     if (seen.has(el.id)) continue;
     seen.add(el.id);
@@ -75,10 +79,37 @@ for (const q of QUADS) {
   }
 }
 
+// 水域 multipolygon（嘉陵江等大水面是 relation，普通 way 请求拿不到）
+const wrelFile = path.join(
+  RAW,
+  fs.existsSync(path.join(RAW, '15km-water-rel.json')) ? '15km-water-rel.json' : '10km-water-rel.json',
+);
+if (fs.existsSync(wrelFile)) {
+  const wj = JSON.parse(fs.readFileSync(wrelFile, 'utf8'));
+  for (const el of wj.elements || []) {
+    const t = el.tags || {};
+    for (const m of el.members || []) {
+      if (m.role === 'inner') continue;
+      const g = m.geometry || [];
+      if (g.length < 4) continue;
+      const outline = g.map((p) => [Math.round(p.lon * 1e6) / 1e6, Math.round(p.lat * 1e6) / 1e6]);
+      if (outline.length > 3 && outline[0][0] === outline[outline.length - 1][0] && outline[0][1] === outline[outline.length - 1][1]) {
+        outline.pop();
+      }
+      areas.push({
+        kind: /嘉陵江/.test(t.name || '') || g.length > 200 ? 'river' : 'water',
+        name: t.name || '',
+        outline,
+      });
+    }
+  }
+  console.log('水域 relation 环', wj.elements.length);
+}
+
 const out = {
   meta: {
     generatedAt: new Date().toISOString().slice(0, 10),
-    bounds: { west: 106.4099, south: 29.5243, east: 106.5131, north: 29.6147, sizeKm: 10 },
+    bounds: { west: 106.3840, south: 29.5017, east: 106.5390, north: 29.6373, sizeKm: 15 },
     source: 'OpenStreetMap (ODbL)',
     quads: QUADS,
   },

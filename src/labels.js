@@ -40,6 +40,9 @@ const MAJOR = new Set([
   'B区机电安装教学楼',
   '建筑与房地产管理学院',
   '学生三舍',
+  // C 区（原重庆建筑高等专科学校）
+  '校友会',
+  '陶艺坊',
 ]);
 
 export function addBuildingLabels(viewer, data, terrain) {
