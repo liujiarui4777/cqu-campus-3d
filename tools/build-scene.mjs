@@ -1,4 +1,5 @@
 // 把 OSM 原始数据 + 考据资料整理成前端可用的 scene.json
+// 2026-10 扩展：A 区（沙坪坝正街 174 号）+ B 区（原重庆建筑大学）
 // 用法：node tools/build-scene.mjs
 import fs from 'node:fs';
 import path from 'node:path';
@@ -28,6 +29,18 @@ const centroid = (ring) => {
   return [sx / n, sy / n];
 };
 
+function pointInPoly(lon, lat, poly) {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const xi = poly[i][0];
+    const yi = poly[i][1];
+    const xj = poly[j][0];
+    const yj = poly[j][1];
+    if (yi > lat !== yj > lat && lon < ((xj - xi) * (lat - yi)) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+
 // ---------- 建筑规则：高度 / 颜色 / 屋顶 ----------
 // 层高（米/层）
 const LEVEL_H = { teach: 4.0, dorm: 3.1, library: 4.2, canteen: 4.6, sport: 5.2, office: 3.9, other: 3.8 };
@@ -50,6 +63,27 @@ const KNOWN = {
   '逸夫图书馆': { levels: 4, height: 18.0, roof: 'flat', wall: '#d8d3c6', roofColor: '#a9a49a' },
 };
 
+// ---------- B 区（原重庆建筑大学，1952 年建校，2000 年并入重庆大学） ----------
+// 层数/高度来自公开建筑资料与建筑类型推断；OSM 有 building:levels 的优先用 OSM
+const KNOWN_B = {
+  '建筑城规学院': { levels: 6, height: 24.0, roof: 'flat', wall: '#cbb6a4', roofColor: '#9a9187', desc: '建筑城规学院（建筑馆），重庆大学建筑学办学主体，原重庆建筑大学核心院系，学院为“建筑老八校”之一。' },
+  '建工馆': { levels: 5, height: 20.0, roof: 'flat', wall: '#c9b6a5', roofColor: '#99917f', desc: '建工馆，土木工程教学科研用房，原重庆建筑大学时期建成。' },
+  '重庆大学B区图书馆': { levels: 4, height: 18.0, roof: 'flat', wall: '#d6cbbb', roofColor: '#a39d92', desc: 'B 区图书馆，原重庆建筑大学图书馆，现服务建筑、土木等学科。' },
+  '重庆大学B区第一综合楼': { levels: 6, height: 24.0, roof: 'flat', wall: '#d3c4b2', roofColor: '#a19a8e', desc: 'B 区第一综合楼，教学、办公与实验综合用房。' },
+  '重庆大学B区第二综合楼': { levels: 6, height: 24.0, roof: 'flat', wall: '#d3c4b2', roofColor: '#a19a8e', desc: 'B 区第二综合楼，教学、办公与实验综合用房。' },
+  '学术报告厅': { levels: 3, height: 15.0, roof: 'flat', wall: '#cdb9a6', roofColor: '#9b9388', desc: 'B 区学术报告厅，大跨度报告与会议空间。' },
+  '建筑与房地产管理学院': { levels: 5, height: 20.0, roof: 'flat', wall: '#cbb6a4', roofColor: '#9a9187', desc: '建筑与房地产管理学院，B 区管理学科教学用房。' },
+  '材料楼': { levels: 5, height: 19.0, roof: 'flat', wall: '#c6b8a9', roofColor: '#98917f', desc: '材料楼，材料科学与工程实验教学用房。' },
+  '科学会堂': { levels: 3, height: 16.0, roof: 'flat', wall: '#d0c0ad', roofColor: '#9f978b', desc: 'B 区科学会堂，大型会议与学术活动场所。' },
+  '重庆大学B区机电安装教学楼': { levels: 5, height: 19.0, roof: 'flat', wall: '#d0c0ad', roofColor: '#9f978b', desc: '机电安装教学楼，原重庆建筑大学机电学科教学用房。' },
+  'B区档案馆': { levels: 4, height: 16.0, roof: 'flat', wall: '#d0c0ad', roofColor: '#9f978b', desc: 'B 区档案馆。' },
+  '学生三舍': { levels: 11, height: 35.0, roof: 'flat', wall: '#dcc8a5', roofColor: '#b7a184', desc: 'B 区学生三舍，高层学生宿舍。' },
+  '学生四舍': { levels: 12, height: 38.0, roof: 'flat', wall: '#dcc8a5', roofColor: '#b7a184', desc: 'B 区学生四舍，高层学生宿舍。' },
+  '重庆大学B区宿舍楼': { levels: 6, height: 19.0, roof: 'flat', wall: '#dcc8a5', roofColor: '#b7a184', desc: 'B 区学生宿舍楼。' },
+  '北园食堂': { levels: 3, height: 14.0, roof: 'flat', wall: '#d9c6a9', roofColor: '#b09b80', desc: 'B 区北园食堂。' },
+  '女生公寓': { levels: 6, height: 19.0, roof: 'flat', wall: '#dcc8a5', roofColor: '#b7a184', desc: 'B 区女生公寓。' },
+};
+
 // 宿舍：按“X舍”匹配
 const dormInfo = { wall: '#dcc8a5', roofColor: '#b7a184' };
 
@@ -69,19 +103,19 @@ function classify(tags, name) {
   if (/食堂|餐厅/.test(n)) return 'canteen';
   if (/图书|馆/.test(n) && !/体育馆|博物馆/.test(n)) return 'library';
   if (/体育馆|风雨操场|体育场|看台/.test(n) || t.leisure === 'sports_hall') return 'sport';
-  if (/教学楼|教室|实验|学院|研究所|实验室|书院/.test(n) || t.building === 'school' || t.building === 'university') return 'teach';
+  if (/教学楼|教室|实验|学院|研究所|实验室|书院|会堂|档案馆/.test(n) || t.building === 'school' || t.building === 'university') return 'teach';
   if (/办公|管理|处|中心|楼/.test(n)) return 'office';
   if (t.building === 'dormitory') return 'dorm';
   if (t.building === 'apartments') return 'dorm';
   return 'other';
 }
 
-function buildBuilding(el) {
+function buildBuilding(el, campus) {
   const t = el.tags || {};
   const name = t.name || t['name:zh'] || '';
   const ring = (el.geometry || []).map((p) => [p.lon, p.lat]);
   if (ring.length < 3) return null;
-  const known = KNOWN[name] || null;
+  const known = (campus === 'B' ? KNOWN_B : KNOWN)[name] || null;
   const dormLevels = DORM_LEVELS[name] || 0;
   const kind = known ? 'landmark' : classify(t, name);
   const lv = Number(t['building:levels']) || known?.levels || dormLevels || 0;
@@ -99,13 +133,33 @@ function buildBuilding(el) {
   const tiny = area < 120;
   if (tiny && !known) height = Math.min(height, 4.2);
 
-  const wall = known?.wall || (kind === 'dorm' ? dormInfo.wall : '#e1dcd0');
-  const roofColor = known?.roofColor || (kind === 'dorm' ? dormInfo.roofColor : '#a8a49b');
-  const roof = known?.roof || (kind === 'teach' || kind === 'office' || kind === 'library' || kind === 'dorm' || kind === 'canteen' ? 'flat' : 'flat');
+  // 无考证数据的建筑按类型给中性色（宿舍偏暖、教学偏冷灰、食堂暖米）
+  const KIND_PALETTE = {
+    dorm: { wall: '#d8c6a6', roof: '#b7a184', glass: '#5d6a70', accent: '#c7b695' },
+    canteen: { wall: '#d5c9b4', roof: '#a9a49a', glass: '#5f7076', accent: '#c5b9a4' },
+    teach: { wall: '#dedad0', roof: '#a8a49b', glass: '#5f7076', accent: '#cbc6ba' },
+    office: { wall: '#d8d5cd', roof: '#a8a49b', glass: '#5f7076', accent: '#c6c2b8' },
+    library: { wall: '#d8d3c6', roof: '#a9a49a', glass: '#5f7076', accent: '#c9c4b6' },
+    sport: { wall: '#d2d7d8', roof: '#8f9a9c', glass: '#5f7076', accent: '#c2c7c8' },
+    other: { wall: '#dbd8d0', roof: '#a8a49b', glass: '#5f7076', accent: '#c8c4ba' },
+  };
+  // B 区（原重庆建筑大学）以红砖/暖灰墙面为主，整体调暖
+  const B_TINT = { dorm: null, teach: { wall: '#d3c3ae', roof: '#9c9488', glass: '#5d696b', accent: '#c2b19c' }, other: { wall: '#d0c1ad', roof: '#9c9488', glass: '#5d696b', accent: '#bfae99' } };
+  let pal = known || KIND_PALETTE[kind] || KIND_PALETTE.other;
+  if (campus === 'B' && !known) {
+    const tint = B_TINT[kind];
+    if (tint) pal = { ...pal, ...tint };
+  }
+  const wall = pal.wall || '#e1dcd0';
+  const roofColor = pal.roofColor || pal.roof || '#a8a49b';
+  const glass = pal.glass || '#5f7076';
+  const accent = pal.accent || wall;
+  const roof = known?.roof || 'flat';
 
   return {
     id: 'w' + el.id,
     osmId: el.id,
+    campus,
     name,
     kind,
     tag: t.building || '',
@@ -115,7 +169,9 @@ function buildBuilding(el) {
     roof,
     wall,
     roofColor,
-    landmark: known?.landmark || null,
+    glass,
+    accent,
+    landmark: known ? (campus === 'B' ? null : known.landmark || null) : null,
     desc: known?.desc || '',
     use: known?.use || '',
     hours: known?.hours || '',
@@ -124,61 +180,118 @@ function buildBuilding(el) {
   };
 }
 
+// ---------- B 区边界（OSM relation 8253635，两个独立外环） ----------
+function bquRings() {
+  const rel = JSON.parse(fs.readFileSync(path.join(RAW, 'osm-bqu-relation.json'), 'utf8')).elements[0];
+  return (rel.members || [])
+    .filter((m) => m.type === 'way' && Array.isArray(m.geometry) && m.geometry.length > 3)
+    .map((m) => m.geometry.map((p) => [Math.round(p.lon * 1e7) / 1e7, Math.round(p.lat * 1e7) / 1e7]));
+}
+
 // ---------- 主流程 ----------
 function main() {
   const buildingsRaw = read('osm-buildings.json');
+  const bquBuildingsRaw = read('osm-bqu-buildings2.json');
   const areasRaw = read('osm-areas.json');
   const roadsRaw = read('osm-roads.json');
   const campusRaw = read('osm-campus.json');
+  const bquRoadsRaw = read('osm-bqu-roads.json');
+  const bquAreaRaw = read('osm-cqu-bqu.json');
 
-  const buildings = buildingsRaw.map(buildBuilding).filter(Boolean);
-  const byName = new Map(buildings.map((b) => [norm(b.name), b]));
+  const ringsB = bquRings();
+  const inBqu = (lon, lat) => ringsB.some((r) => pointInPoly(lon, lat, r));
+
+  // ---- A 区建筑 ----
+  const buildings = buildingsRaw.map((el) => buildBuilding(el, 'A')).filter(Boolean);
+
+  // ---- B 区建筑：中心落在 B 区边界内 ----
+  const seenIds = new Set(buildings.map((b) => b.osmId));
+  let bquDropped = 0;
+  for (const el of bquBuildingsRaw) {
+    if (!el.geometry || el.geometry.length < 3) continue;
+    if (seenIds.has(el.id)) continue;
+    const c = centroid(el.geometry.map((p) => [p.lon, p.lat]));
+    if (!inBqu(c[0], c[1])) {
+      bquDropped++;
+      continue;
+    }
+    const b = buildBuilding(el, 'B');
+    if (!b) continue;
+    // B 区无名教学/实验楼统一归为教学用房，避免“其他”色
+    if (!b.name && b.kind === 'other') b.kind = 'teach';
+    buildings.push(b);
+    seenIds.add(el.id);
+  }
 
   // ---- 区域：水域 / 绿地 / 球场 ----
   const areas = [];
-  for (const el of areasRaw) {
+  const addArea = (el, kind) => {
     const t = el.tags || {};
     const ring = (el.geometry || []).map((p) => [p.lon, p.lat]);
-    if (ring.length < 3) continue;
-    let kind = null;
-    if (t.natural === 'water') kind = t.water === 'lake' || t.name ? (t.name === '嘉陵江' ? 'river' : 'water') : 'water';
-    if (t.water === 'river') kind = 'river';
-    else if (t.leisure === 'pitch' || t.leisure === 'swimming_pool') kind = 'pitch';
-    else if (t.leisure === 'garden' || t.leisure === 'park' || t.landuse === 'forest') kind = 'green';
-    else if (t.landuse === 'residential' || t.landuse === 'construction' || t.natural === 'wetland') continue;
-    if (!kind) continue;
+    if (ring.length < 3) return;
+    // OSM 闭合 way 首尾重复时去掉末点
+    if (ring.length > 3 && ring[0][0] === ring[ring.length - 1][0] && ring[0][1] === ring[ring.length - 1][1]) {
+      ring.pop();
+    }
     const c = centroid(ring);
-    // 只保留 A 区周边
-    if (!(c[0] > 106.450 && c[0] < 106.480 && c[1] > 29.555 && c[1] < 29.582)) continue;
     areas.push({
       id: 'a' + el.id,
       name: t.name || '',
       kind,
       sport: t.sport || '',
-      color: kind === 'water' ? '#8fb6c9' : kind === 'river' ? '#9fc3d4' : kind === 'pitch' ? (t.sport === 'soccer' ? '#7fa86a' : '#b8725a') : '#a8c294',
+      color:
+        kind === 'water' || kind === 'river'
+          ? '#8fb6c9'
+          : kind === 'pitch'
+            ? t.sport === 'soccer'
+              ? '#7fa86a'
+              : '#b8725a'
+            : '#a8c294',
       outline: ring.map(([lon, lat]) => [Math.round(lon * 1e7) / 1e7, Math.round(lat * 1e7) / 1e7]),
       center: c.map((v) => Math.round(v * 1e7) / 1e7),
     });
+  };
+
+  for (const el of areasRaw) {
+    const t = el.tags || {};
+    const ring = (el.geometry || []).map((p) => [p.lon, p.lat]);
+    if (ring.length < 3) continue;
+    let kind = null;
+    if (t.natural === 'water') kind = t.water === 'river' || t.name === '嘉陵江' ? 'river' : 'water';
+    else if (t.water === 'river') kind = 'river';
+    else if (t.leisure === 'pitch' || t.leisure === 'swimming_pool') kind = 'pitch';
+    else if (t.leisure === 'garden' || t.leisure === 'park' || t.landuse === 'forest') kind = 'green';
+    else if (t.landuse === 'residential' || t.landuse === 'construction' || t.natural === 'wetland') continue;
+    if (!kind) continue;
+    const c = centroid(ring);
+    // 只保留校园周边
+    if (!(c[0] > 106.450 && c[0] < 106.480 && c[1] > 29.555 && c[1] < 29.582)) continue;
+    addArea(el, kind);
   }
+
+  // B 区足球场（OSM 中带“重庆大学”名称，不在 A 区场地请求里）
+  const bquPitch = bquAreaRaw.find((e) => e.id === 266636697);
+  if (bquPitch) addArea(bquPitch, 'pitch');
 
   // ---- 道路 ----
   // 车道数默认值参考《城市道路工程设计规范》常见断面：主干 4 车道、次干 2 车道、支路 2 车道、服务道 1 车道
   const lanesDefault = {
     primary: 4, secondary: 2, tertiary: 2, primary_link: 2, secondary_link: 2,
     residential: 2, unclassified: 2, service: 1, footway: 0, steps: 0, cycleway: 0,
+    pedestrian: 0, path: 0,
   };
   // 考据：A 区内部道路几乎没有正式路名，唯一确认的是沿江路（官方称临江路）
   const ROAD_NAMES = { 569007954: '沿江路', 569007907: '沿江路' };
   const roads = [];
   const seenRoad = new Set();
-  for (const el of [...roadsRaw, ...campusRaw.filter((e) => e.tags?.highway)]) {
+  const pushRoad = (el) => {
     const t = el.tags || {};
-    if (!t.highway) continue;
-    if (seenRoad.has(el.id)) continue;
-    seenRoad.add(el.id);
+    if (!t.highway) return;
+    if (seenRoad.has(el.id)) return;
+    if (!t.highway.match(/primary|secondary|tertiary|unclassified|service|residential|footway|steps|cycleway|pedestrian|path/)) return;
     const pts = (el.geometry || []).map((p) => [p.lon, p.lat]);
-    if (pts.length < 2) continue;
-    if (!t.highway.match(/primary|secondary|tertiary|unclassified|service|residential|footway|steps|cycleway/)) continue;
+    if (pts.length < 2) return;
+    seenRoad.add(el.id);
     const lanes = t.lanes !== undefined ? Number(t.lanes) : (lanesDefault[t.highway] ?? 2);
     const width = Number(t.width) || (lanes > 0 ? lanes * 3.25 + 1.0 : 2.4);
     roads.push({
@@ -195,6 +308,17 @@ function main() {
       lit: t.lit === 'yes',
       path: pts.map(([lon, lat]) => [Math.round(lon * 1e7) / 1e7, Math.round(lat * 1e7) / 1e7]),
     });
+  };
+
+  for (const el of roadsRaw) pushRoad(el);
+  for (const el of campusRaw) {
+    if (el.tags?.highway) pushRoad(el);
+  }
+  for (const el of bquRoadsRaw) {
+    // B 区周边：排除过境高速（不属于校园，也不用于步行导航）
+    const hw = el.tags?.highway;
+    if (hw === 'motorway' || hw === 'motorway_link' || hw === 'construction') continue;
+    pushRoad(el);
   }
 
   // ---- 地标（人工参数，见 docs/调研-A区建筑资料.md）----
@@ -230,31 +354,54 @@ function main() {
   };
 
   // ---- 校区边界 ----
-  const uni = campusRaw.find((e) => e.tags?.amenity === 'university' && /重庆大学/.test(e.tags?.name || ''));
-  const boundary = uni ? (uni.geometry || []).map((p) => [p.lon, p.lat]) : [];
+  const uni = campusRaw.find((e) => e.tags?.amenity === 'university' && /重庆大学A区/.test(e.tags?.name || ''))
+    || campusRaw.find((e) => e.tags?.amenity === 'university' && /重庆大学/.test(e.tags?.name || ''));
+  const boundaryA = uni ? (uni.geometry || []).map((p) => [p.lon, p.lat]) : [];
+  const boundaries = [];
+  if (boundaryA.length > 3) boundaries.push({ name: '重庆大学A区', campus: 'A', coords: boundaryA });
+  for (const r of ringsB) boundaries.push({ name: '重庆大学B区', campus: 'B', coords: r });
+
+  const bquCenters = buildings.filter((b) => b.campus === 'B').map((b) => b.center);
+  const bquCenter = bquCenters.length
+    ? [
+        bquCenters.reduce((s, c) => s + c[0], 0) / bquCenters.length,
+        bquCenters.reduce((s, c) => s + c[1], 0) / bquCenters.length,
+      ]
+    : [106.4566, 29.5695];
 
   const scene = {
     meta: {
       generatedAt: new Date().toISOString().slice(0, 10),
-      title: '重庆大学 A 区三维校园',
+      title: '重庆大学 A 区 + B 区三维校园',
       sources: ['OpenStreetMap (ODbL)', '重庆市文旅委文物资料', '重庆大学官方资料'],
-      center: [106.4648, 29.5672],
+      center: [106.4615, 29.5695],
       bounds: { west: 106.4540, south: 29.5580, east: 106.4735, north: 29.5770 },
+      mapBounds: { west: 106.4099, south: 29.5243, east: 106.5131, north: 29.6147, sizeKm: 10 },
     },
+    campuses: [
+      { id: 'A', name: '重庆大学A区', address: '沙坪坝正街 174 号', center: [106.4648, 29.5672] },
+      { id: 'B', name: '重庆大学B区', address: '沙正街 83 号（原重庆建筑大学）', center: bquCenter.map((v) => Math.round(v * 1e7) / 1e7) },
+    ],
     buildings,
     areas,
     roads,
     landmarks,
     track,
-    boundary,
+    boundary: boundaryA,
+    boundaries,
   };
 
   fs.mkdirSync(OUT, { recursive: true });
   fs.writeFileSync(path.join(OUT, 'scene.json'), JSON.stringify(scene), 'utf8');
-  console.log('buildings', buildings.length, '| areas', areas.length, '| roads', roads.length);
+  console.log(
+    'buildings', buildings.length,
+    '(A', buildings.filter((b) => b.campus === 'A').length,
+    '/ B', buildings.filter((b) => b.campus === 'B').length, ')',
+    '| areas', areas.length, '| roads', roads.length,
+    '| B 区边界外跳过', bquDropped,
+  );
   console.log('landmark buildings:', buildings.filter((b) => b.landmark).map((b) => b.name).join(', '));
   console.log('written', path.join(OUT, 'scene.json'));
 }
 
 main();
-
