@@ -80,6 +80,9 @@ def main():
             else:
                 col = (118, 123, 129, 240)
             d.line(pts, fill=col, width=int(round(wpx)), joint='curve')
+            # 中心线：双车道以上主干道画一条浅色细线
+            if cls in ('primary', 'secondary', 'tertiary') and int(rd.get('lanes', 0)) >= 2:
+                d.line(pts, fill=(236, 228, 202, 210), width=max(1, int(round(wpx * 0.08))), joint='curve')
 
         sh = Image.new('RGBA', (W, H), (0, 0, 0, 0))
         ds = ImageDraw.Draw(sh)
