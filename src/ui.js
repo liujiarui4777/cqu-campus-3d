@@ -239,6 +239,10 @@ export function initInteraction(viewer, data, terrain, graph, overview) {
     { name: 'B区运动场', lon: 106.45595, lat: 29.57050, h: 150, pitch: -34 },
     { name: '建筑城规学院', lon: 106.45765, lat: 29.57066, h: 110, pitch: -30 },
     { name: '科学会堂', lon: 106.45760, lat: 29.57200, h: 100, pitch: -30 },
+    // C 区（原重庆建筑高等专科学校）
+    { name: 'C区校友会', lon: 106.45288, lat: 29.56393, h: 60, pitch: -26 },
+    { name: 'C区陶艺坊', lon: 106.45291, lat: 29.56377, h: 55, pitch: -26 },
+    { name: 'C区宿舍', lon: 106.45242, lat: 29.56510, h: 90, pitch: -30 },
   ];
   const nav = document.getElementById('guides');
   if (nav) {
@@ -610,19 +614,31 @@ void main() {
     });
   }
 
-  // 卫星影像开关
+  // 卫星影像开关（影像按需加载：第一次打开时才下载 esri.jpg）
   const tglImagery = document.getElementById('toggle-imagery');
   if (tglImagery) {
-    tglImagery.addEventListener('change', () => {
+    tglImagery.addEventListener('change', async () => {
       const L = window.__layers;
-      if (!L || !L.esri) {
-        tglImagery.checked = false;
-        setHint('影像层未加载');
+      if (!L) return;
+      if (!tglImagery.checked) {
+        if (L.esri) L.esri.show = false;
+        if (L.style) L.style.show = true;
+        setHint('风格化沙盘底图');
         return;
       }
-      L.esri.show = tglImagery.checked;
-      L.style.show = !tglImagery.checked;
-      setHint(tglImagery.checked ? '真实卫星影像' : '风格化沙盘底图');
+      tglImagery.disabled = true;
+      setHint('正在加载卫星影像…');
+      try {
+        const layer = await window.__ensureEsri();
+        layer.show = true;
+        if (L.style) L.style.show = false;
+        setHint('真实卫星影像');
+      } catch (e) {
+        tglImagery.checked = false;
+        setHint('影像层加载失败');
+      } finally {
+        tglImagery.disabled = false;
+      }
     });
   }
 
