@@ -4,3 +4,6 @@ shots/
 .npm-cache/
 *.log
 .DS_Store
+
+tmp_*.cjs
+tools/push.mjs
