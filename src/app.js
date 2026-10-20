@@ -107,7 +107,8 @@ import { addSports } from './sports.js';
     if (!only || only === 'areas') addAreas(viewer, data, terrain);
     if (!only || only === 'river') addRiver(viewer, data, terrain);
     if (!only || only === 'roads') addRoads(viewer, data, terrain);
-    if (!only || only === 'buildings') addBuildings(viewer, data, terrain);
+    const glbMode = new URLSearchParams(location.search).get('glb') === '1';
+    if ((!only || only === 'buildings') && !glbMode) addBuildings(viewer, data, terrain);
     if (!only || only === 'landmarks') addLandmarks(viewer, data, terrain);
     if (!only || only === 'trees') window.__treeCount = addTrees(viewer, data, terrain);
     if (!only || only === 'lamps') window.__lampCount = addLamps(viewer, data, terrain);
@@ -121,6 +122,26 @@ import { addSports } from './sports.js';
     }
     if (dom.boot) dom.boot.style.display = 'none';
     const graph = buildRoadGraph(data.roads);
+    // glTF 建筑（试验）
+    if (new URLSearchParams(location.search).get('glb') === '1') {
+      try {
+        const model = await Cesium.Model.fromGltfAsync({
+          url: BASE + 'data/buildings.glb',
+          modelMatrix: Cesium.Transforms.eastNorthUpToFixedFrame(
+            Cesium.Cartesian3.fromDegrees(106.4648, 29.5672, 0),
+          ),
+          shadows: Cesium.ShadowMode.ENABLED,
+          scale: 1,
+        });
+        viewer.scene.primitives.add(model);
+        viewer.shadows = true;
+        window.__glbModel = model;
+      } catch (e) {
+        console.error('glb 加载失败', e);
+        document.getElementById('error').textContent = 'glb 加载失败: ' + e.message;
+      }
+    }
+
     initInteraction(viewer, data, terrain, graph, overview);
     window.__CQU__ = { viewer, data, terrain, graph, nav: { nearestNode, shortestPath } };
   } catch (e) {

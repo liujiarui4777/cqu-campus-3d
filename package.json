@@ -12,7 +12,9 @@
     "scene": "node tools/build-scene.mjs"
   },
   "dependencies": {
+    "@gltf-transform/core": "^4.5.1",
     "cesium": "^1.146.0",
+    "earcut": "^3.2.4",
     "isomorphic-git": "^1.44.3",
     "localtunnel": "^2.0.2",
     "react": "^19.3.1",
