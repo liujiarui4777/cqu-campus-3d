@@ -1,4 +1,4 @@
-﻿// 把 OSM 原始数据 + 考据资料整理成前端可用的 scene.json
+// 把 OSM 原始数据 + 考据资料整理成前端可用的 scene.json
 // 用法：node tools/build-scene.mjs
 import fs from 'node:fs';
 import path from 'node:path';
@@ -221,11 +221,11 @@ function main() {
     },
   ];
 
-  // ---- 运动场（400m 跑道 + 内场），按 OSM 实测走向 ----
+  // ---- 运动场（400m 跑道 + 内场），按卫星影像实测走向 ----
   const track = {
     id: 'lz-track', name: '思群广场', alias: 'A 区运动场',
-    center: [106.46433, 29.56698],
-    bearing: 307, // 长轴走向（NW–SE）
+    center: [106.46380, 29.56670],
+    bearing: 82, // 长轴走向（近似东西向，影像实测 81.9°）
     desc: '思群广场（旧称“新广场”），1960 年代由郑思群校长带领师生平整土地建成。400 m 塑胶跑道（2024 年改造达国家田径场地标准）+ 标准 11 人制足球场（105×68 m）+ 递进式阶梯看台，长期承担校运会与开学典礼。',
   };
 
