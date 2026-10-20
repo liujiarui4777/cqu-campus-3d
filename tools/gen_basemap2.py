@@ -63,6 +63,24 @@ def main():
             if len(pts) >= 3:
                 d.polygon(pts, fill=col)
 
+        # 道路：按真实米宽烘焙进底图
+        pxPerMeter = W / ((east - west) * 111320 * math.cos(math.radians((north + south) / 2)))
+        for rd in scene.get('roads', []):
+            pts = [to_px(lon, lat) for lon, lat in rd.get('path', [])]
+            if len(pts) < 2:
+                continue
+            wpx = max(1.2, float(rd.get('width', 6)) * pxPerMeter)
+            cls = rd.get('cls', '')
+            if cls in ('footway', 'steps', 'cycleway'):
+                col = (214, 208, 196, 235)
+                wpx = max(1.0, wpx)
+            elif cls in ('primary', 'secondary', 'tertiary'):
+                col = (96, 101, 108, 255)
+                wpx = max(2.0, wpx)
+            else:
+                col = (118, 123, 129, 240)
+            d.line(pts, fill=col, width=int(round(wpx)), joint='curve')
+
         sh = Image.new('RGBA', (W, H), (0, 0, 0, 0))
         ds = ImageDraw.Draw(sh)
         for b in scene.get('buildings', []):
