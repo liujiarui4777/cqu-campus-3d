@@ -442,3 +442,67 @@ html[data-theme='night'] .dock-status { color: #93a3b3; }
   .card { right: 12px; left: 12px; width: auto; bottom: 96px; }
   .dock { gap: 8px; }
 }
+
+
+/* ---------------- 课表面板 ---------------- */
+.schedule {
+  position: absolute;
+  right: 20px;
+  bottom: 96px;
+  width: 340px;
+  max-width: calc(100vw - 40px);
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 18px 20px 18px;
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(16px);
+  z-index: 26;
+  display: none;
+}
+.schedule.show { display: block; animation: pop 0.22s ease both; }
+.schedule h3 { margin: 0 0 2px; font-size: 17px; font-weight: 650; }
+.schedule-date { margin: 0 0 12px; font-size: 12px; color: var(--accent); letter-spacing: 0.06em; }
+.schedule-close {
+  position: absolute; right: 12px; top: 10px;
+  border: 0; background: transparent; font-size: 20px; line-height: 1;
+  color: var(--muted); cursor: pointer;
+}
+.schedule-list { max-height: 210px; overflow-y: auto; margin-bottom: 12px; }
+.sched-item {
+  display: flex; width: 100%; align-items: baseline; gap: 8px;
+  border: 0; border-bottom: 1px solid rgba(31, 42, 51, 0.06);
+  background: transparent; font: inherit; font-size: 12.5px; color: var(--ink);
+  padding: 8px 2px; cursor: pointer; text-align: left;
+}
+.sched-item:hover { background: var(--accent-soft); }
+.sched-item b { flex: none; font-weight: 600; color: var(--accent); font-size: 11.5px; }
+.sched-item span { flex: 1; }
+.sched-item em { flex: none; font-style: normal; font-size: 11px; color: var(--muted); }
+.sched-empty { margin: 0 0 12px; font-size: 12.5px; color: var(--muted); line-height: 1.6; }
+.schedule textarea {
+  width: 100%; height: 84px; resize: vertical;
+  border: 1px solid var(--line); border-radius: 10px;
+  background: #f7f9fa; color: var(--ink);
+  font: inherit; font-size: 12px; line-height: 1.6;
+  padding: 8px 10px; outline: none; letter-spacing: 0.02em;
+}
+.schedule textarea:focus { border-color: var(--accent); }
+.schedule-save {
+  width: 100%; margin-top: 8px; appearance: none;
+  border: 1px solid var(--accent); background: var(--accent-soft); color: var(--accent);
+  font: inherit; font-size: 13px; letter-spacing: 0.06em;
+  padding: 8px 0; border-radius: 10px; cursor: pointer;
+  transition: all 0.18s ease;
+}
+.schedule-save:hover { background: var(--accent); color: #fff; }
+html[data-theme='night'] .schedule {
+  background: rgba(20, 28, 40, 0.95);
+  border-color: rgba(255, 255, 255, 0.1);
+  color: #e8eef4;
+}
+html[data-theme='night'] .schedule textarea {
+  background: rgba(255, 255, 255, 0.06);
+  color: #e2eaf2;
+  border-color: rgba(255, 255, 255, 0.12);
+}
