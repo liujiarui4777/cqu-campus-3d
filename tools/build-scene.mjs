@@ -155,7 +155,11 @@ function main() {
   }
 
   // ---- 道路 ----
-  const roadWidth = { primary: 14, secondary: 10, tertiary: 8, unclassified: 6, service: 4.5, residential: 6, footway: 2.2, steps: 2.4, cycleway: 2, primary_link: 7, secondary_link: 6 };
+  // 车道数默认值参考《城市道路工程设计规范》常见断面：主干 4 车道、次干 2 车道、支路 2 车道、服务道 1 车道
+  const lanesDefault = {
+    primary: 4, secondary: 2, tertiary: 2, primary_link: 2, secondary_link: 2,
+    residential: 2, unclassified: 2, service: 1, footway: 0, steps: 0, cycleway: 0,
+  };
   const roads = [];
   for (const el of [...roadsRaw, ...campusRaw.filter((e) => e.tags?.highway)]) {
     const t = el.tags || {};
@@ -163,11 +167,20 @@ function main() {
     const pts = (el.geometry || []).map((p) => [p.lon, p.lat]);
     if (pts.length < 2) continue;
     if (!t.highway.match(/primary|secondary|tertiary|unclassified|service|residential|footway|steps|cycleway/)) continue;
+    const lanes = t.lanes !== undefined ? Number(t.lanes) : (lanesDefault[t.highway] ?? 2);
+    const width = Number(t.width) || (lanes > 0 ? lanes * 3.25 + 1.0 : 2.4);
     roads.push({
       id: 'r' + el.id,
       name: t.name || '',
+      nameEn: t['name:en'] || '',
       cls: t.highway,
-      width: roadWidth[t.highway] || 5,
+      lanes,
+      width: Math.round(width * 10) / 10,
+      oneway: t.oneway === 'yes' || t.oneway === '1' || t.oneway === '-1',
+      bridge: !!t.bridge,
+      tunnel: !!t.tunnel,
+      surface: t.surface || '',
+      lit: t.lit === 'yes',
       path: pts.map(([lon, lat]) => [Math.round(lon * 1e7) / 1e7, Math.round(lat * 1e7) / 1e7]),
     });
   }
