@@ -53,6 +53,12 @@ const KNOWN = {
 // 宿舍：按“X舍”匹配
 const dormInfo = { wall: '#dcc8a5', roofColor: '#b7a184' };
 
+// 考证层数（一舍6/二舍3/三舍3/六舍7/七舍7/八舍5/九舍7/十舍12/十一舍6/新华村6）
+const DORM_LEVELS = {
+  '学生一宿舍': 6, '学生二宿舍': 3, '学生三宿舍': 3, '学生六宿舍': 7,
+  '学生七宿舍': 7, '学生八宿舍': 5, '学生九宿舍': 7, '学生十宿舍': 12, '学生十一宿舍': 6,
+};
+
 const norm = (s) => (s || '').replace(/\s+/g, '');
 
 // 识别建筑语义
@@ -76,8 +82,9 @@ function buildBuilding(el) {
   const ring = (el.geometry || []).map((p) => [p.lon, p.lat]);
   if (ring.length < 3) return null;
   const known = KNOWN[name] || null;
+  const dormLevels = DORM_LEVELS[name] || 0;
   const kind = known ? 'landmark' : classify(t, name);
-  const lv = Number(t['building:levels']) || known?.levels || 0;
+  const lv = Number(t['building:levels']) || known?.levels || dormLevels || 0;
   const heightTag = Number(t.height) || 0;
   const latRad = (centroid(ring)[1] * Math.PI) / 180;
   const area = ringArea(ring) * 111320 * 111320 * Math.cos(latRad);

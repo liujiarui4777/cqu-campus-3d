@@ -7,8 +7,44 @@ const scene = JSON.parse(fs.readFileSync('data/scene.json', 'utf8'));
 const MLAT = 110540;
 const MLON = 111320 * Math.cos((29.567 * Math.PI) / 180);
 
-// A 区已有建筑的中心点，用于去重
+// A 区已有建筑的包围盒，用于排除重叠（防止周边方块插进校园）
+const campusBoxes = scene.buildings.map((b) => {
+  let minLon = Infinity, maxLon = -Infinity, minLat = Infinity, maxLat = -Infinity;
+  for (const [lon, lat] of b.outline || []) {
+    minLon = Math.min(minLon, lon); maxLon = Math.max(maxLon, lon);
+    minLat = Math.min(minLat, lat); maxLat = Math.max(maxLat, lat);
+  }
+  return { minLon, maxLon, minLat, maxLat };
+});
+function overlaps(a, b) {
+  return !(a.maxLon < b.minLon || a.minLon > b.maxLon || a.maxLat < b.minLat || a.minLat > b.maxLat);
+}
 const campus = scene.buildings.map((b) => b.center);
+
+// A 区边界（用于排除校园内及贴边的建筑）
+const boundary = scene.boundary || [];
+function pointInPoly(lon, lat, poly) {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const xi = poly[i][0], yi = poly[i][1];
+    const xj = poly[j][0], yj = poly[j][1];
+    if (yi > lat !== yj > lat && lon < ((xj - xi) * (lat - yi)) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+function distToBoundary(lon, lat, poly) {
+  let best = Infinity;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const ax = poly[j][0], ay = poly[j][1];
+    const bx = poly[i][0], by = poly[i][1];
+    const dx = bx - ax, dy = by - ay;
+    const t = Math.max(0, Math.min(1, ((lon - ax) * dx + (lat - ay) * dy) / (dx * dx + dy * dy || 1)));
+    const px = ax + dx * t, py = ay + dy * t;
+    const d = Math.hypot((lon - px) * MLON, (lat - py) * MLAT);
+    best = Math.min(best, d);
+  }
+  return best;
+}
 
 const out = [];
 for (const el of raw) {
@@ -28,15 +64,8 @@ for (const el of raw) {
   const cx = (minLon + maxLon) / 2;
   const cy = (minLat + maxLat) / 2;
 
-  // 与 A 区建筑太近的跳过（避免和精细建筑重叠）
-  let tooClose = false;
-  for (const [lon, lat] of campus) {
-    if (Math.abs(lon - cx) < 0.0005 && Math.abs(lat - cy) < 0.0005) {
-      tooClose = true;
-      break;
-    }
-  }
-  if (tooClose) continue;
+  // 在校园边界内、或距边界不足 70m 的，一律跳过（不再往校园里塞方块）
+  if (boundary.length > 3 && (pointInPoly(cx, cy, boundary) || distToBoundary(cx, cy, boundary) < 70)) continue;
 
   const w = (maxLon - minLon) * MLON;
   const d = (maxLat - minLat) * MLAT;
