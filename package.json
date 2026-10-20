@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "cesium": "^1.146.0",
+    "isomorphic-git": "^1.44.3",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "zustand": "^5.0.15"

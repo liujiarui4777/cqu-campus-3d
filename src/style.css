@@ -317,3 +317,12 @@ html[data-theme='night'] .hint { color: #93a3b3; }
 .sr-item:hover { background: var(--accent-soft); }
 .sr-item em { font-style: normal; font-size: 11.5px; color: var(--muted); }
 .sr-empty { padding: 10px 14px; font-size: 12.5px; color: var(--muted); }
+
+
+.credit-line {
+  display: block;
+  margin-top: 6px;
+  font-size: 10.5px;
+  color: rgba(93, 107, 120, 0.75);
+  letter-spacing: 0.02em;
+}
