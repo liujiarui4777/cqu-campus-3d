@@ -159,7 +159,7 @@ const gltf = {
       name: 'buildings',
       primitives: [
         {
-          attributes: { POSITION: posAcc, NORMAL: nrmAcc, TEXCOORD_0: uvAcc, COLOR_0: colAcc },
+          attributes: { POSITION: posAcc, NORMAL: nrmAcc, TEXCOORD_0: uvAcc },
           indices: idxAcc,
           material: 0,
         },
@@ -169,6 +169,8 @@ const gltf = {
   materials: [
     {
       name: 'facade',
+      doubleSided: true,
+      emissiveFactor: [0.22, 0.22, 0.22],
       pbrMetallicRoughness: {
         baseColorTexture: { index: 0, texCoord: 0 },
         metallicFactor: 0,
