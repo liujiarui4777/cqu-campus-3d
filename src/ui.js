@@ -20,6 +20,7 @@ export function initInteraction(viewer, data, terrain) {
   const cardMeta = document.getElementById('card-meta');
   const cardDesc = document.getElementById('card-desc');
   const cardTags = document.getElementById('card-tags');
+  const cardExtra = document.getElementById('card-extra');
 
   let current = null;
 
@@ -47,6 +48,13 @@ export function initInteraction(viewer, data, terrain) {
     `;
     cardDesc.textContent = b.desc || '';
     cardDesc.style.display = b.desc ? 'block' : 'none';
+
+    if (cardExtra) {
+      const parts = [];
+      if (b.use) parts.push('<p><b>使用</b>' + b.use + '</p>');
+      if (b.hours) parts.push('<p><b>开放</b>' + b.hours + '</p>');
+      cardExtra.innerHTML = parts.join('');
+    }
 
     cardTags.innerHTML = '';
     if (b.landmark) {
