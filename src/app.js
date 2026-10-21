@@ -1,4 +1,4 @@
-﻿/* 重庆大学 A 区 + B 区三维校园 —— 场景入口（原生 ES module，不依赖构建工具） */
+/* 重庆大学 A 区 + B 区三维校园 —— 场景入口（原生 ES module，不依赖构建工具） */
 const Cesium = window.Cesium;
 
 const CENTER = [106.4615, 29.5695];
@@ -140,9 +140,8 @@ import { addBuildingLabels } from './labels.js';
     // 卫星影像按需加载：默认不下载 4 MB 的 esri.jpg，第一次打开「卫星影像」时才拉取
     async function ensureEsri() {
       if (esriLayer) return esriLayer;
-      // data/esri.jpg 的实际范围（比精细底图稍大，偏移约 100 m，必须单独指定）
-      const ESRI_META = { west: 106.4500, south: 29.5530, east: 106.4800, north: 29.5820 };
-      const esri = await createBasemapProvider(ASSET_BASE, Cesium, ESRI_META, 'esri.jpg', ASSET_V);
+      // 影像必须与精细底图/地形用同一范围（data/terrain.json），否则整体错位
+      const esri = await createBasemapProvider(ASSET_BASE, Cesium, terrain.meta, 'esri.jpg', ASSET_V);
       esriLayer = viewer.scene.imageryLayers.addImageryProvider(esri);
       esriLayer.show = false;
       layers.esri = esriLayer;
