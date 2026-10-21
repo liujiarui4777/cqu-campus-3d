@@ -2,6 +2,7 @@
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
+import zlib from 'node:zlib';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -21,10 +22,14 @@ const MIME = {
   '.glb': 'model/gltf-binary',
   '.gltf': 'model/gltf+json',
   '.bin': 'application/octet-stream',
+  '.gz': 'application/gzip',
   '.wasm': 'application/wasm',
   '.woff2': 'font/woff2',
   '.txt': 'text/plain; charset=utf-8',
 };
+
+// 可压缩类型（.gz 本身已压缩，跳过）
+const COMPRESSIBLE = new Set(['.html', '.js', '.mjs', '.css', '.json', '.svg', '.gltf', '.txt', '.bin', '.glb']);
 
 const server = http.createServer((req, res) => {
   try {
@@ -41,12 +46,21 @@ const server = http.createServer((req, res) => {
       return;
     }
     const ext = path.extname(abs).toLowerCase();
-    res.writeHead(200, {
+    const accept = String(req.headers['accept-encoding'] || '');
+    const canGzip = COMPRESSIBLE.has(ext) && !abs.endsWith('.gz') && /\bgzip\b/.test(accept);
+
+    const headers = {
       'content-type': MIME[ext] || 'application/octet-stream',
       'cache-control': 'no-cache',
       'access-control-allow-origin': '*',
-    });
-    fs.createReadStream(abs).pipe(res);
+      vary: 'Accept-Encoding',
+    };
+    if (canGzip) headers['content-encoding'] = 'gzip';
+    res.writeHead(200, headers);
+
+    const stream = fs.createReadStream(abs);
+    if (canGzip) stream.pipe(zlib.createGzip({ level: 6 })).pipe(res);
+    else stream.pipe(res);
   } catch (e) {
     res.writeHead(500).end(String(e));
   }

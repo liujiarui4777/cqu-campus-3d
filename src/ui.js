@@ -1,4 +1,4 @@
-import { SHUTTLE, SHUTTLE_STOPS, todaySchedule, nextBus } from './shuttle.js';
+import { SHUTTLE, SHUTTLE_STOPS, BUS_INFO, todaySchedule, nextBus } from './shuttle.js';
 import { parseSchedule, matchBuilding, todayIndex, save as saveSchedule, load as loadSchedule, DAY_NAMES } from './schedule.js';
 import { nearestNode, shortestPath } from './nav.js';
 /* 交互：点击建筑 → 信息卡；地标导览；昼夜主题 */
@@ -81,7 +81,7 @@ export function initInteraction(viewer, data, terrain, graph, overview) {
     card.classList.remove('show');
     current = null;
     if (viewer.scene.canvas) viewer.scene.canvas.style.cursor = 'grab';
-    setHint(BASE_STATUS);
+    setHint('在地图上依次点击起点、终点建筑');
   }
 
   function show(entity) {
@@ -93,6 +93,22 @@ export function initInteraction(viewer, data, terrain, graph, overview) {
 
     cardTitle.textContent = b.name || '未命名建筑';
     cardSub.textContent = b.alias || (b.landmark ? '校园地标' : '');
+
+    // 建筑图片（离线生成的 3D 示意图，缺失时自动隐藏）
+    const photoWrap = document.getElementById('card-photo-wrap');
+    const photo = document.getElementById('card-photo');
+    if (photoWrap && photo) {
+      if (b.id) {
+        photoWrap.hidden = false;
+        photo.onerror = () => {
+          photoWrap.hidden = true;
+        };
+        photo.src = './data/imgs/' + b.id + '.jpg';
+        photo.alt = (b.name || '建筑') + ' 三维示意';
+      } else {
+        photoWrap.hidden = true;
+      }
+    }
     const kind = KIND_LABEL[b.kind] || '建筑';
     cardMeta.innerHTML = `
       <span>${kind}</span>
@@ -145,69 +161,248 @@ export function initInteraction(viewer, data, terrain, graph, overview) {
   }
 
   /* ---------- 步行导航 ---------- */
-  let navMode = false;
   let navFrom = null;
+  let navTo = null;
   let navLine = null;
-  const statusEl = document.getElementById('dock-status');
-  const BASE_STATUS = '点击建筑查看详情 · 拖拽旋转 · 滚轮缩放';
-  function setHint(text) {
-    if (!statusEl) return;
-    statusEl.textContent = text;
-    statusEl.title = text;
-  }
   const navBtn = document.getElementById('nav-btn');
-  const navMod = {};
+  const navPanel = document.getElementById('nav-panel');
+  const navResult = document.getElementById('nav-result');
+  const navClear = document.getElementById('nav-clear');
+  const navClose = document.getElementById('nav-close');
+  const fromInput = document.getElementById('nav-from-input');
+  const toInput = document.getElementById('nav-to-input');
+  const fromSuggest = document.getElementById('nav-from-suggest');
+  const toSuggest = document.getElementById('nav-to-suggest');
+
+  function setHint(text) {
+    if (navResult) navResult.textContent = text;
+  }
 
   function clearNavLine() {
     if (navLine) {
-      viewer.entities.remove(navLine);
+      for (const e of navLine) viewer.entities.remove(e);
       navLine = null;
     }
   }
 
+  const campusName = (c) => (c === 'B' ? 'B 区' : c === 'C' ? 'C 区' : 'A 区');
+  const navAll = (data.buildings || []).filter((b) => b.name);
+
+  function hideSuggest(box) {
+    if (!box) return;
+    box.classList.remove('show');
+    box.innerHTML = '';
+  }
+
+  function renderSuggest(input, box, which) {
+    if (!input || !box) return;
+    const q = input.value.trim().toLowerCase();
+    if (!q) {
+      hideSuggest(box);
+      return;
+    }
+    const hits = navAll
+      .filter((b) => (b.name || '').toLowerCase().includes(q) || (b.alias || '').toLowerCase().includes(q))
+      .slice(0, 8);
+    box.innerHTML = '';
+    if (!hits.length) {
+      box.innerHTML = '<div class="nav-empty">没有匹配的建筑</div>';
+      box.classList.add('show');
+      return;
+    }
+    for (const b of hits) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'nav-sitem';
+      btn.innerHTML =
+        '<b>' + (b.name || '') + '</b><small>' + campusName(b.campus) + ' · ' + (b.levels || 0) + ' 层</small>';
+      btn.addEventListener('mousedown', (ev) => {
+        ev.preventDefault();
+        chooseNav(which, b);
+        hideSuggest(box);
+      });
+      box.appendChild(btn);
+    }
+    box.classList.add('show');
+  }
+
+  function resetNav() {
+    clearNavLine();
+    navFrom = null;
+    navTo = null;
+    if (fromInput) fromInput.value = '';
+    if (toInput) toInput.value = '';
+    hideSuggest(fromSuggest);
+    hideSuggest(toSuggest);
+    setHint('输入起点、终点，或直接点击地图上的建筑');
+  }
+
+  function openNav() {
+    if (navPanel) navPanel.hidden = false;
+    if (navBtn) navBtn.classList.add('active');
+    if (fromInput) setTimeout(() => fromInput.focus(), 120);
+    setHint('输入起点、终点，或直接点击地图上的建筑');
+  }
+
+  function closeNav() {
+    if (navPanel) navPanel.hidden = true;
+    if (navBtn) navBtn.classList.remove('active');
+    resetNav();
+  }
+
   if (navBtn) {
     navBtn.addEventListener('click', () => {
-      navMode = !navMode;
-      navBtn.classList.toggle('active', navMode);
-      navFrom = null;
-      clearNavLine();
-      setHint(navMode ? '导航模式：先点击起点建筑' : '点击建筑查看详情 · 左键拖拽旋转 · 滚轮缩放 · 右键平移');
+      if (navPanel && navPanel.hidden) openNav();
+      else closeNav();
     });
+  }
+  if (navClear) navClear.addEventListener('click', resetNav);
+  if (navClose) navClose.addEventListener('click', closeNav);
+
+  if (fromInput) {
+    fromInput.addEventListener('input', () => renderSuggest(fromInput, fromSuggest, 'from'));
+    fromInput.addEventListener('focus', () => renderSuggest(fromInput, fromSuggest, 'from'));
+    fromInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        const first = fromSuggest && fromSuggest.querySelector('.nav-sitem');
+        if (first) first.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+      }
+      if (e.key === 'Escape') hideSuggest(fromSuggest);
+    });
+  }
+  if (toInput) {
+    toInput.addEventListener('input', () => renderSuggest(toInput, toSuggest, 'to'));
+    toInput.addEventListener('focus', () => renderSuggest(toInput, toSuggest, 'to'));
+    toInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        const first = toSuggest && toSuggest.querySelector('.nav-sitem');
+        if (first) first.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+      }
+      if (e.key === 'Escape') hideSuggest(toSuggest);
+    });
+  }
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('.nav-search')) {
+      hideSuggest(fromSuggest);
+      hideSuggest(toSuggest);
+    }
+  });
+
+  function chooseNav(which, b) {
+    if (which === 'from') {
+      navFrom = b;
+      if (fromInput) fromInput.value = b.name || '';
+      if (navTo) computeRoute();
+      else {
+        setHint('已选起点，再选终点');
+        if (toInput) setTimeout(() => toInput.focus(), 60);
+      }
+    } else {
+      navTo = b;
+      if (toInput) toInput.value = b.name || '';
+      if (navFrom) computeRoute();
+      else {
+        setHint('已选终点，再选起点');
+        if (fromInput) fromInput.focus();
+      }
+    }
+  }
+
+  function addRouteMarker(b, color, text) {
+    const h0 = terrain.sample(b.center[0], b.center[1]);
+    return viewer.entities.add({
+      position: Cesium.Cartesian3.fromDegrees(b.center[0], b.center[1], h0 + 4),
+      point: {
+        pixelSize: 14,
+        color: Cesium.Color.fromCssColorString(color),
+        outlineColor: Cesium.Color.WHITE,
+        outlineWidth: 2.5,
+        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+      },
+      label: {
+        text,
+        font: '12px system-ui, sans-serif',
+        fillColor: Cesium.Color.WHITE,
+        showBackground: true,
+        backgroundColor: Cesium.Color.fromCssColorString(color).withAlpha(0.92),
+        backgroundPadding: new Cesium.Cartesian2(6, 3),
+        pixelOffset: new Cesium.Cartesian2(0, -22),
+        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+      },
+    });
+  }
+
+  function computeRoute() {
+    if (!navFrom || !navTo || !graph) return;
+    const s = nearestNode(graph, navFrom.center[0], navFrom.center[1]);
+    const t = nearestNode(graph, navTo.center[0], navTo.center[1]);
+    const res = shortestPath(graph, s.id, t.id);
+    clearNavLine();
+    if (!res) {
+      setHint('这两点之间没有找到步行路线');
+      return;
+    }
+    const arr = [];
+    for (const n of res.path) arr.push(n.lon, n.lat, terrain.sample(n.lon, n.lat) + 2.4);
+    const positions = Cesium.Cartesian3.fromDegreesArrayHeights(arr);
+
+    // 三层路径：深色描边 → 发光主线 → 方向箭头（用带高度折线，保证线宽生效）
+    const casing = viewer.entities.add({
+      polyline: {
+        positions,
+        width: 24,
+        material: Cesium.Color.fromCssColorString('#0a2a38').withAlpha(0.55),
+      },
+    });
+    const glow = viewer.entities.add({
+      polyline: {
+        positions,
+        width: 14,
+        material: new Cesium.PolylineGlowMaterialProperty({
+          glowPower: 0.25,
+          color: Cesium.Color.fromCssColorString('#00f0ff'),
+        }),
+      },
+    });
+    const arrows = viewer.entities.add({
+      polyline: {
+        positions,
+        width: 18,
+        material: new Cesium.PolylineArrowMaterialProperty(Cesium.Color.fromCssColorString('#dfffff')),
+      },
+    });
+    const start = addRouteMarker(navFrom, '#22b573', '起点');
+    const end = addRouteMarker(navTo, '#e2574c', '终点');
+    navLine = [casing, glow, arrows, start, end];
+
+    const dist = Math.round(res.length);
+    const min = Math.max(1, Math.round(dist / 75));
+    if (navResult) {
+      navResult.innerHTML =
+        '<div class="nr-main">全程 <b>' + dist + ' m</b> · 步行约 <b>' + min + ' 分钟</b></div>' +
+        '<div class="nr-sub">' +
+        (navFrom.name || '起点') +
+        ' → ' +
+        (navTo.name || '终点') +
+        ' · ' +
+        res.path.length +
+        ' 个路点</div>';
+    }
+  }
+
+  function setNavPoint(b) {
+    if (!navFrom) chooseNav('from', b);
+    else chooseNav('to', b);
   }
 
   const handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
   handler.setInputAction((movement) => {
     const picked = viewer.scene.pick(movement.position);
     if (Cesium.defined(picked) && picked.id && picked.id.properties) {
-      if (navMode && graph) {
+      if (navPanel && !navPanel.hidden && graph) {
         const b = picked.id.properties.data.getValue();
         if (b) {
-          if (!navFrom) {
-            navFrom = b;
-            setHint('起点：' + b.name + '，再点击终点建筑');
-          } else {
-            const s = nearestNode(graph, navFrom.center[0], navFrom.center[1]);
-            const t = nearestNode(graph, b.center[0], b.center[1]);
-            const res = shortestPath(graph, s.id, t.id);
-            clearNavLine();
-            if (res) {
-              const arr = [];
-              for (const n of res.path) arr.push(n.lon, n.lat);
-              navLine = viewer.entities.add({
-                polyline: {
-                  positions: Cesium.Cartesian3.fromDegreesArray(arr),
-                  width: 6,
-                  material: Cesium.Color.fromCssColorString('#2f6f6a'),
-                  clampToGround: true,
-                },
-              });
-              const min = Math.max(1, Math.round(res.length / 78));
-              setHint('步行 ' + Math.round(res.length) + ' m，约 ' + min + ' 分钟（' + navFrom.name + ' → ' + b.name + '）');
-            } else {
-              setHint('这两点之间没有找到步行路线');
-            }
-            navFrom = null;
-          }
+          setNavPoint(b);
           return;
         }
       }
@@ -224,46 +419,7 @@ export function initInteraction(viewer, data, terrain, graph, overview) {
     viewer.scene.canvas.style.cursor = hit ? 'pointer' : 'grab';
   });
 
-  /* ---------- 地标导览 ---------- */
-  const guide = [
-    { name: '主教学楼', lon: 106.46655, lat: 29.5684, h: 165, pitch: -30 },
-    { name: '钟塔', lon: 106.4634, lat: 29.56991, h: 70, pitch: -22 },
-    { name: '大校门', lon: 106.46, lat: 29.5695, h: 55, pitch: -20 },
-    { name: '民主湖', lon: 106.46599, lat: 29.56635, h: 130, pitch: -35 },
-    { name: '风雨操场', lon: 106.46852, lat: 29.56692, h: 120, pitch: -32 },
-    { name: '思群广场', lon: 106.46433, lat: 29.56698, h: 180, pitch: -38 },
-    { name: '老图书馆', lon: 106.46616, lat: 29.56926, h: 90, pitch: -28 },
-    { name: '寅初亭', lon: 106.4633, lat: 29.5687, h: 70, pitch: -26 },
-    // B 区（原重庆建筑大学）
-    { name: 'B区图书馆', lon: 106.45661, lat: 29.56911, h: 90, pitch: -28 },
-    { name: 'B区运动场', lon: 106.45595, lat: 29.57050, h: 150, pitch: -34 },
-    { name: '建筑城规学院', lon: 106.45765, lat: 29.57066, h: 110, pitch: -30 },
-    { name: '科学会堂', lon: 106.45760, lat: 29.57200, h: 100, pitch: -30 },
-    // C 区（原重庆建筑高等专科学校）
-    { name: 'C区校友会', lon: 106.45288, lat: 29.56393, h: 60, pitch: -26 },
-    { name: 'C区陶艺坊', lon: 106.45291, lat: 29.56377, h: 55, pitch: -26 },
-    { name: 'C区宿舍', lon: 106.45242, lat: 29.56510, h: 90, pitch: -30 },
-  ];
-  const nav = document.getElementById('guides');
-  if (nav) {
-    for (const g of guide) {
-      const b = document.createElement('button');
-      b.className = 'guide-btn';
-      b.textContent = g.name;
-      b.addEventListener('click', () => {
-        viewer.camera.flyTo({
-          destination: Cesium.Cartesian3.fromDegrees(g.lon - 0.0011, g.lat - 0.0014, g.h + 260),
-          orientation: {
-            heading: Cesium.Math.toRadians(20),
-            pitch: Cesium.Math.toRadians(g.pitch),
-            roll: 0,
-          },
-          duration: 1.6,
-        });
-      });
-      nav.appendChild(b);
-    }
-  }
+  /* ---------- 地标导览（已简化：底部地标条移除，改由搜索定位） ---------- */
 
   /* ---------- 昼夜 ---------- */
   const root = document.documentElement;
@@ -521,24 +677,78 @@ void main() {
   }
   // 启动时不渲染课表标记，只有打开「今日课程」面板才显示
 
-  /* ---------- 校车时刻表 ---------- */
-  const shuttleBtn = document.getElementById('shuttle-btn');
+  /* ---------- 校园巴士 ---------- */
+  const shuttleBtn = document.getElementById('bus-btn') || document.getElementById('shuttle-btn');
   const shuttlePanel = document.getElementById('shuttle');
-  const shuttleNext = document.getElementById('shuttle-next');
+  const busNextTime = document.getElementById('bus-next-time');
+  const busNextMeta = document.getElementById('bus-next-meta');
+  const busCount = document.getElementById('bus-count');
   const shuttleList = document.getElementById('shuttle-list');
   const shuttleStops = document.getElementById('shuttle-stops');
+  const busMeta = document.getElementById('bus-meta');
+  const busTips = document.getElementById('bus-tips');
+  const busSource = document.getElementById('bus-source');
+  const campusMeta = document.getElementById('campus-meta');
+  const campusTips = document.getElementById('campus-tips');
+  const campusSource = document.getElementById('campus-source');
+  const busBodyCommuter = document.getElementById('bus-body-commuter');
+  const busBodyCampus = document.getElementById('bus-body-campus');
   let shuttleDir = 'outbound';
+  let shuttleStopIdx = 1;
+  let busTab = 'commuter';
+  let busTimer = null;
+
+  function renderBusInfo() {
+    const c = BUS_INFO.commuter;
+    if (busMeta) {
+      busMeta.innerHTML =
+        '<div><span>单程</span><b>' + c.duration + '</b></div>' +
+        '<div><span>距离</span><b>' + c.distance + '</b></div>' +
+        '<div><span>票价</span><b>' + c.fare + '</b></div>' +
+        '<div><span>电话</span><b>' + c.phone + '</b></div>';
+    }
+    if (busTips) busTips.innerHTML = c.tips.map((t) => '<li>' + t + '</li>').join('');
+    if (busSource) busSource.textContent = '来源：' + c.source;
+    const s = BUS_INFO.campus;
+    if (campusMeta) {
+      campusMeta.innerHTML =
+        '<div><span>线路</span><b>' + s.route + '</b></div>' +
+        '<div><span>单程</span><b>' + s.duration + '</b></div>' +
+        '<div><span>票价</span><b>' + s.fare + '</b></div>' +
+        '<div><span>电话</span><b>' + s.phone + '</b></div>';
+    }
+    if (campusTips) campusTips.innerHTML = s.tips.map((t) => '<li>' + t + '</li>').join('');
+    if (campusSource) campusSource.textContent = '来源：' + s.source;
+  }
 
   function renderShuttle() {
     const t = SHUTTLE[shuttleDir];
-    const stopIdx = shuttleDir === 'outbound' ? 1 : 2;
+    const stopIdx = Math.min(shuttleStopIdx, t.stops.length - 1);
     const nb = nextBus(stopIdx, shuttleDir);
-    if (shuttleNext) {
-      shuttleNext.textContent = nb
-        ? '下一班 ' + nb.time + '（' + nb.inMin + ' 分钟后）· ' + t.stops[stopIdx]
-        : '今日班次已结束';
+    if (busNextTime) busNextTime.textContent = nb ? nb.time : t.times[0][stopIdx];
+    if (busNextMeta) {
+      busNextMeta.textContent = nb
+        ? nb.inMin + ' 分钟后 · ' + t.stops[stopIdx] + ' 上车'
+        : '今日已结束 · 明日首班 ' + t.times[0][stopIdx] + '（' + t.stops[stopIdx] + '）';
     }
-    if (shuttleStops) shuttleStops.textContent = '经停：' + t.stops.join(' · ');
+    if (shuttleStops) {
+      shuttleStops.innerHTML = t.stops
+        .map(
+          (name, i) =>
+            '<button type="button" class="bus-stop' + (i === stopIdx ? ' current' : '') + '" data-idx="' + i + '">' +
+            '<span class="bus-stop-idx">' + (i + 1) + '</span>' +
+            '<span class="bus-stop-name">' + name + '</span>' +
+            (i === stopIdx ? '<span class="bus-stop-tag">在此上车</span>' : '') +
+            '</button>',
+        )
+        .join('');
+      shuttleStops.querySelectorAll('.bus-stop').forEach((el) => {
+        el.addEventListener('click', () => {
+          shuttleStopIdx = Number(el.getAttribute('data-idx'));
+          renderShuttle();
+        });
+      });
+    }
     if (shuttleList) {
       shuttleList.innerHTML = todaySchedule(stopIdx, shuttleDir)
         .map(
@@ -548,46 +758,68 @@ void main() {
         )
         .join('');
     }
+    if (busCount) {
+      busCount.textContent = '共 ' + t.times.length + ' 班 · ' + t.stops[stopIdx] + ' 发车';
+    }
   }
+
+  function startBusTimer() {
+    if (busTimer) clearInterval(busTimer);
+    busTimer = setInterval(() => {
+      if (shuttlePanel && shuttlePanel.classList.contains('show') && busTab === 'commuter') renderShuttle();
+    }, 30000);
+  }
+
+  document.querySelectorAll('.bus-tabs button').forEach((b) => {
+    b.addEventListener('click', () => {
+      document.querySelectorAll('.bus-tabs button').forEach((x) => x.classList.remove('active'));
+      b.classList.add('active');
+      busTab = b.getAttribute('data-bus');
+      if (busBodyCommuter) busBodyCommuter.hidden = busTab !== 'commuter';
+      if (busBodyCampus) busBodyCampus.hidden = busTab !== 'campus';
+    });
+  });
 
   document.querySelectorAll('.shuttle-tabs button').forEach((b) => {
     b.addEventListener('click', () => {
       document.querySelectorAll('.shuttle-tabs button').forEach((x) => x.classList.remove('active'));
       b.classList.add('active');
       shuttleDir = b.getAttribute('data-dir');
+      shuttleStopIdx = shuttleDir === 'outbound' ? 1 : 2;
       renderShuttle();
     });
   });
+
   if (shuttleBtn) {
     shuttleBtn.addEventListener('click', () => {
       const open = shuttlePanel.classList.toggle('show');
-      if (open) renderShuttle();
+      if (open) {
+        renderBusInfo();
+        renderShuttle();
+        startBusTimer();
+      }
     });
   }
   const shuttleClose = document.getElementById('shuttle-close');
-  if (shuttleClose) shuttleClose.addEventListener('click', () => shuttlePanel.classList.remove('show'));
+  if (shuttleClose) {
+    shuttleClose.addEventListener('click', () => {
+      shuttlePanel.classList.remove('show');
+      if (busTimer) clearInterval(busTimer);
+      busTimer = null;
+    });
+  }
 
-  // 地图上标记 A 区乘车点
+  // 地图上标记 A 区乘车点（只留圆点，不再显示旧“校车 ·”文字标签）
   for (const s of SHUTTLE_STOPS) {
     const h0 = terrain.sample(s.lon, s.lat);
     viewer.entities.add({
       id: s.id,
       position: Cesium.Cartesian3.fromDegrees(s.lon, s.lat, h0 + 3),
       point: {
-        pixelSize: 9,
+        pixelSize: 7,
         color: Cesium.Color.fromCssColorString('#2f6f6a'),
         outlineColor: Cesium.Color.WHITE,
-        outlineWidth: 2,
-      },
-      label: {
-        text: '校车 · ' + s.name,
-        font: '11px system-ui, sans-serif',
-        fillColor: Cesium.Color.fromCssColorString('#1f2a33'),
-        showBackground: true,
-        backgroundColor: Cesium.Color.fromCssColorString('#e2ecea').withAlpha(0.9),
-        backgroundPadding: new Cesium.Cartesian2(5, 2),
-        pixelOffset: new Cesium.Cartesian2(0, -16),
-        distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0, 2500),
+        outlineWidth: 1.5,
         disableDepthTestDistance: Number.POSITIVE_INFINITY,
       },
       properties: { kind: 'shuttle', name: s.name },
@@ -615,49 +847,80 @@ void main() {
   }
 
   // 卫星影像开关（影像按需加载：第一次打开时才下载 esri.jpg）
-  const tglImagery = document.getElementById('toggle-imagery');
-  if (tglImagery) {
-    tglImagery.addEventListener('change', async () => {
+  const satBtn = document.getElementById('sat-btn');
+  let satOn = false;
+  if (satBtn) {
+    satBtn.addEventListener('click', async () => {
       const L = window.__layers;
       if (!L) return;
-      if (!tglImagery.checked) {
+      if (satOn) {
+        satOn = false;
+        satBtn.classList.remove('active');
         if (L.esri) L.esri.show = false;
         if (L.style) L.style.show = true;
-        setHint('风格化沙盘底图');
         return;
       }
-      tglImagery.disabled = true;
-      setHint('正在加载卫星影像…');
+      satBtn.disabled = true;
       try {
-        const layer = await window.__ensureEsri();
+        const layer = window.__ensureEsri ? await window.__ensureEsri() : L.esri;
+        if (!layer) throw new Error('no esri layer');
         layer.show = true;
         if (L.style) L.style.show = false;
-        setHint('真实卫星影像');
+        satOn = true;
+        satBtn.classList.add('active');
       } catch (e) {
-        tglImagery.checked = false;
-        setHint('影像层加载失败');
+        satOn = false;
+        satBtn.classList.remove('active');
       } finally {
-        tglImagery.disabled = false;
+        satBtn.disabled = false;
       }
     });
   }
 
-  // 建筑标签开关
-  const tglLabels = document.getElementById('toggle-labels');
-  if (tglLabels) {
-    tglLabels.addEventListener('change', () => {
-      if (window.__labelApi) window.__labelApi.setVisible(tglLabels.checked);
-      setHint(tglLabels.checked ? '建筑标签已开启' : '建筑标签已关闭');
-    });
+  /* ---------- 固定视角：全景 / A 区 / B 区 / C 区 ---------- */
+  const viewsNav = document.getElementById('views');
+  const viewBtns = viewsNav ? Array.from(viewsNav.querySelectorAll('[data-view]')) : [];
+  const backHomeBtn = document.getElementById('back-home');
+  const HOME_POS = { lon: 106.4585, lat: 29.5520, h: 1950 };
+
+  function setActiveView(key) {
+    for (const b of viewBtns) b.classList.toggle('active', b.getAttribute('data-view') === key);
   }
+  function goView(key, msg) {
+    hide();
+    if (window.__flyToView) window.__flyToView(key);
+    setActiveView(key);
+    if (msg) setHint(msg);
+  }
+  for (const b of viewBtns) {
+    b.addEventListener('click', () => goView(b.getAttribute('data-view')));
+  }
+  if (backHomeBtn) backHomeBtn.addEventListener('click', () => goView('all', '已回到全景视角'));
+
+  // 相机离开全景机位（放大、拖走、点了某栋楼）时，右上角出现「返回全景」
+  let lastCamCheck = 0;
+  viewer.scene.postRender.addEventListener(() => {
+    const now = performance.now();
+    if (now - lastCamCheck < 300) return;
+    lastCamCheck = now;
+    const c = viewer.camera.positionCartographic;
+    const lon = Cesium.Math.toDegrees(c.longitude);
+    const lat = Cesium.Math.toDegrees(c.latitude);
+    const away =
+      Math.abs(c.height - HOME_POS.h) > 260 ||
+      Math.abs(lon - HOME_POS.lon) > 0.0045 ||
+      Math.abs(lat - HOME_POS.lat) > 0.0035;
+    if (backHomeBtn) backHomeBtn.classList.toggle('show', away);
+  });
 
   /* ---------- 回到全景 ---------- */
   function flyHome(msg) {
     hide();
     if (typeof overview === 'function') overview(true);
+    setActiveView('all');
     if (msg) setHint(msg);
   }
-  const homeBtn = document.getElementById('home-btn');
+  const homeBtn = document.getElementById('brand-home');
   if (homeBtn) homeBtn.addEventListener('click', () => flyHome('已回到全景视角'));
   const cardBack = document.getElementById('card-back');
   if (cardBack) cardBack.addEventListener('click', () => flyHome('已回到全景视角'));
@@ -665,5 +928,52 @@ void main() {
     if (e.key === 'Escape') flyHome('已回到全景视角');
   });
 
+  /* ---------- 天气（Open-Meteo，无需 key） ---------- */
+  const weatherIcon = document.getElementById('weather-icon');
+  const weatherText = document.getElementById('weather-text');
+  const WEATHER_MAP = {
+    0: ['☀', '晴'], 1: ['☀', '晴'], 2: ['⛅', '多云'], 3: ['☁', '阴'],
+    45: ['🌫', '雾'], 48: ['🌫', '雾'],
+    51: ['🌦', '小雨'], 53: ['🌦', '小雨'], 55: ['🌧', '中雨'],
+    56: ['🌧', '冻雨'], 57: ['🌧', '冻雨'],
+    61: ['🌧', '小雨'], 63: ['🌧', '中雨'], 65: ['🌧', '大雨'],
+    66: ['🌧', '冻雨'], 67: ['🌧', '冻雨'],
+    71: ['🌨', '小雪'], 73: ['🌨', '中雪'], 75: ['❄', '大雪'], 77: ['🌨', '雪'],
+    80: ['🌦', '阵雨'], 81: ['🌧', '阵雨'], 82: ['⛈', '强阵雨'],
+    85: ['🌨', '阵雪'], 86: ['❄', '强阵雪'],
+    95: ['⛈', '雷雨'], 96: ['⛈', '雷雨'], 99: ['⛈', '雷雨'],
+  };
+  async function loadWeather() {
+    if (!weatherText) return;
+    try {
+      const r = await fetch(
+        'https://api.open-meteo.com/v1/forecast?latitude=29.567&longitude=106.465&current=temperature_2m,weather_code&timezone=Asia%2FShanghai',
+      );
+      const j = await r.json();
+      const t = Math.round(j.current.temperature_2m);
+      const [icon, label] = WEATHER_MAP[j.current.weather_code] || ['☁', '多云'];
+      if (weatherIcon) weatherIcon.textContent = icon;
+      weatherText.textContent = t + '° ' + label;
+    } catch (e) {
+      weatherText.textContent = '--°';
+    }
+  }
+  loadWeather();
+  setInterval(loadWeather, 10 * 60 * 1000);
+
+  // 供 DOM 建筑标签调用：导航面板打开时用于选点，否则弹信息卡
+  window.__focusBuilding = (b) => {
+    if (!b) return;
+    if (navPanel && !navPanel.hidden) {
+      setNavPoint(b);
+      return;
+    }
+    const e = viewer.entities.getById('b:' + b.id);
+    if (e) show(e);
+  };
+
   return { hide };
 }
+
+
+

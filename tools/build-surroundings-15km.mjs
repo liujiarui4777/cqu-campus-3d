@@ -1,4 +1,4 @@
-// 非重庆大学建筑白模（15 km 范围）：保留 OSM 真实轮廓，前端挤出成白模
+﻿// 非重庆大学建筑白模（15 km 范围）：保留 OSM 真实轮廓，前端挤出成白模
 // 排除 A/B/C 区边界内及边界外 90 m 内的建筑
 // 用法：node tools/build-surroundings-15km.mjs
 import fs from 'node:fs';
@@ -112,7 +112,7 @@ for (const file of files) {
     const cy = (minLat + maxLat) / 2;
     const w = (maxLon - minLon) * mLon(cy);
     const d = (maxLat - minLat) * MLAT;
-    if (w < 6 || d < 6 || w > 300 || d > 300 || w * d < 36) {
+    if (w < 6 || d < 6 || w > 140 || d > 140 || w * d < 36) {
       skippedSize++;
       continue;
     }
@@ -139,8 +139,16 @@ for (const file of files) {
     const lv = Number(t['building:levels']);
     if (tagH > 0) h = tagH;
     else if (lv > 0) h = lv * LEVEL_H;
-    else h = (TYPE_LEVELS[t.building] || 3) * LEVEL_H;
-    h = Math.min(140, Math.max(3.5, h));
+    else {
+      let n = TYPE_LEVELS[t.building] || 3;
+      // OSM 缺层数时，大占地建筑（厂房/商场/综合体）按面积抬高，避免“大平房”穿模感
+      const footprint = w * d;
+      if (footprint > 3000) n = Math.max(n, 4);
+      if (footprint > 8000) n = Math.max(n, 6);
+      if (footprint > 20000) n = Math.max(n, 8);
+      h = n * LEVEL_H;
+    }
+    h = Math.min(140, Math.max(6, h));
 
     let outline = g.map((p) => [Math.round(p.lon * 1e7) / 1e7, Math.round(p.lat * 1e7) / 1e7]);
     if (outline.length > 3 && outline[0][0] === outline[outline.length - 1][0] && outline[0][1] === outline[outline.length - 1][1]) {
@@ -149,7 +157,7 @@ for (const file of files) {
     outline = simplify(outline, 24);
     if (outline.length < 3) continue;
 
-    out.push({ outline, h: Math.round(h * 10) / 10, tone: el.id % 3 });
+    out.push({ h: Math.round(h * 10) / 10, tone: el.id % 3, lon: Math.round(cx * 1e7) / 1e7, lat: Math.round(cy * 1e7) / 1e7, w: Math.round(w * 10) / 10, d: Math.round(d * 10) / 10 });
   }
 }
 
@@ -164,3 +172,6 @@ const payload = {
 fs.writeFileSync(path.join(DATA, 'surroundings.json'), JSON.stringify(payload), 'utf8');
 console.log('白模', out.length, '栋 | 跳过校园/重叠', skippedCampus, '| 尺寸异常', skippedSize);
 console.log('written', path.join(DATA, 'surroundings.json'), (fs.statSync(path.join(DATA, 'surroundings.json')).size / 1024).toFixed(0) + 'KB');
+
+
+
