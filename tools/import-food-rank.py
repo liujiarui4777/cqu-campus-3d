@@ -8,6 +8,8 @@
 """
 import json
 import os
+import re
+
 import openpyxl
 
 SRC = r'D:\User_Data\Documents\xwechat_files\wxid_0ex1lrsnkgka12_1ad8\msg\file\2026-10\重大饭协红黑榜.xlsx'
@@ -61,10 +63,26 @@ def main():
                         comments.append(c)
                 if not reason and not comments:
                     continue
+                # 老校区榜没写是哪个区，能从店名里认出来就认（如「A区柏树林餐厅…」）
+                if campus == 'A/B/C':
+                    mm = re.search(r'([ABCabc])\s*区', name)
+                    if mm:
+                        item_campus = mm.group(1).upper()
+                    else:
+                        item_campus = campus
+                        for kw, cs in (('一食堂', 'A'), ('二食堂', 'A'), ('三食堂', 'A'), ('五食堂', 'A'),
+                                       ('莘莘', 'A'), ('柏树林', 'A'), ('东林', 'A'), ('新华园', 'A'),
+                                       ('民主湖', 'A'), ('锦康', 'B'), ('同心苑', 'B'), ('建工', 'B'),
+                                       ('城环', 'C'), ('陶艺坊', 'C')):
+                            if kw in name:
+                                item_campus = cs
+                                break
+                else:
+                    item_campus = campus
                 items.append({
                     'name': name,
                     'type': ctype,
-                    'campus': campus,
+                    'campus': item_campus,
                     'rank': rank,
                     'reason': reason,
                     'comments': comments,
