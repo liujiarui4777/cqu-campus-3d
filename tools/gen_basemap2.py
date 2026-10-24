@@ -167,7 +167,13 @@ def main():
     ap.add_argument('--aa', type=float, default=0.9, help='矢量图层高斯模糊半径（像素）')
     ap.add_argument('--vectors', default='', help='10 km 周边矢量 JSON（basemap-vectors.json）')
     ap.add_argument('--no-scene', action='store_true', help='不叠加 scene.json 细节')
+    # 数据子目录：虎溪用 --dir hx（data/hx/），A/B/C 留空
+    ap.add_argument('--dir', default='', help='数据子目录，例如 hx')
     args = ap.parse_args()
+
+    global DATA
+    if args.dir:
+        DATA = os.path.join(ROOT, 'data', args.dir)
 
     with open(os.path.join(DATA, args.bin + '.json'), encoding='utf-8') as f:
         meta = json.load(f)

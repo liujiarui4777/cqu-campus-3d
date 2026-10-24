@@ -58,6 +58,8 @@ def main():
     ap.add_argument("--north", type=float, required=True)
     ap.add_argument("--out", default="terrain")
     ap.add_argument("--size", type=int, default=1024)
+    # 输出子目录：虎溪校区用 --dir hx → data/hx/terrain.bin+json，A/B/C 保持空
+    ap.add_argument("--dir", default="")
     args = ap.parse_args()
 
     Z = args.z
@@ -129,7 +131,7 @@ def main():
     print("elev min/max/mean", float(grid.min()), float(grid.max()), float(grid.mean()), flush=True)
 
     q = np.round(grid * 10.0).astype(np.int16)
-    out_dir = os.path.join(os.path.dirname(__file__), "..", "data")
+    out_dir = os.path.join(os.path.dirname(__file__), "..", "data", args.dir) if args.dir else os.path.join(os.path.dirname(__file__), "..", "data")
     os.makedirs(out_dir, exist_ok=True)
     with open(os.path.join(out_dir, f"{args.out}.bin"), "wb") as f:
         f.write(q.tobytes())

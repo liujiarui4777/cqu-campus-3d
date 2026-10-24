@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """抓取 Esri World Imagery 卫星影像，并按当前地形范围重采样为等经纬度网格。
 
 背景：data/esri.jpg 必须与 data/terrain.json 的 west/south/east/north 严格一致，
@@ -61,12 +61,13 @@ def main():
     # 与 OSM/模型对齐用的平移（输出像素）：把影像内容整体移动 dx/dy 像素
     ap.add_argument('--shift-x', type=float, default=0.0)
     ap.add_argument('--out', default=os.path.join(DATA, 'esri.jpg'))
+    ap.add_argument('--meta', default=os.path.join(DATA, 'terrain.json'), help='地形 meta（决定影像范围）')
     ap.add_argument('--quality', type=int, default=84)
     ap.add_argument('--shift-y', type=float, default=0.0)
     args = ap.parse_args()
     z = args.z
 
-    meta = json.load(open(os.path.join(DATA, 'terrain.json'), encoding='utf-8'))
+    meta = json.load(open(args.meta, encoding='utf-8'))
     west, south, east, north = meta['west'], meta['south'], meta['east'], meta['north']
     os.makedirs(CACHE, exist_ok=True)
 

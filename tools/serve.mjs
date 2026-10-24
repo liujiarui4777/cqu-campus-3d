@@ -51,7 +51,8 @@ const server = http.createServer((req, res) => {
 
     const headers = {
       'content-type': MIME[ext] || 'application/octet-stream',
-      'cache-control': 'no-cache',
+      // 本地开发一律不缓存：改了模块直接刷新就能看到，不必每次改版本号
+      'cache-control': 'no-store, must-revalidate',
       'access-control-allow-origin': '*',
       vary: 'Accept-Encoding',
     };
