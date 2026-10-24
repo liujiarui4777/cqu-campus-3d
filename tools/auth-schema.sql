@@ -450,7 +450,8 @@ begin
     'exp', (v_sess ->> 'exp')::bigint,
     'name', v_row.name,
     'kind', v_row.kind,
-    'sid', v_row.sid
+    'sid', v_row.sid,
+    'email', v_row.email
   );
 end;
 $$;
@@ -475,7 +476,7 @@ begin
 
   v_hash := encode(digest(p_token, 'sha256'), 'hex');
 
-  select u.id, u.name, u.kind, u.sid, s.expires_at
+  select u.id, u.name, u.kind, u.sid, u.email, s.expires_at
     into v_row
     from public.app_sessions s
     join public.app_users u on u.id = s.user_id
@@ -498,6 +499,7 @@ begin
     'name', v_row.name,
     'kind', v_row.kind,
     'sid', v_row.sid,
+    'email', v_row.email,
     'exp', (extract(epoch from v_row.expires_at) * 1000)::bigint
   );
 end;
