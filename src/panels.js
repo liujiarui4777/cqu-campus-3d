@@ -1,6 +1,6 @@
 /* 插件面板：左侧功能栏 + 右侧抽屉，每个按钮对应一个面板（导航 / 巴士 / 美食 / 课表 / 账号） */
 
-import { submitMessage, isTelemetryOn } from './telemetry.js?v=20261101a';
+import { submitMessage, isTelemetryOn } from './telemetry.js?v=20261103a';
 
 const TITLES = {
   nav: '步行导航',
@@ -445,13 +445,20 @@ function initMessage() {
       '&body=' + encodeURIComponent(full);
   }
 
-  // 默认用登录姓名署名；学生清空输入框即为匿名
-  if (nickEl) {
+  // 默认用登录姓名署名；学生自己改过（哪怕清空）就不再自动填，清空即为匿名
+  let nickTouched = false;
+  function fillNick() {
+    if (!nickEl || nickTouched || nickEl.value) return;
     try {
       const u = JSON.parse(sessionStorage.getItem(AUTH_KEY) || 'null');
-      if (u && u.name && !nickEl.value) nickEl.value = u.name;
+      if (u && u.name) nickEl.value = u.name;
     } catch (e) {}
   }
+  if (nickEl) nickEl.addEventListener('input', () => { nickTouched = true; });
+  fillNick();
+  // 登录发生在面板初始化之后，所以每次点开留言面板再补一次署名
+  const railMsg = document.querySelector('[data-plugin="message"]');
+  if (railMsg) railMsg.addEventListener('click', fillNick);
 
   if (sendBtn) {
     sendBtn.addEventListener('click', async () => {

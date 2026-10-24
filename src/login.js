@@ -3,7 +3,7 @@
  * 登录成功后会把「姓名 + 时间 + 设备 + 大致地区」静默上报到作者后台（见 telemetry.js）。
  */
 
-import { reportLogin } from './telemetry.js?v=20261101a';
+import { reportLogin } from './telemetry.js?v=20261103a';
 
 const AUTH_KEY = 'cqu-auth-user';
 const EXTRA = {

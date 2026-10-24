@@ -57,26 +57,44 @@ let geoCache = null;
 
 function geoLookup() {
   if (geoCache) return Promise.resolve(geoCache);
+
+  // 单个接口：返回 {region, city} 或 null
+  const one = (url, ms) =>
+    new Promise((resolve) => {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => {
+        ctrl.abort();
+        resolve(null);
+      }, ms);
+      fetch(url, { signal: ctrl.signal })
+        .then((r) => r.json())
+        .then((j) => {
+          clearTimeout(timer);
+          const region = String((j && (j.region || j.region_name)) || '');
+          const city = String((j && (j.city || j.city_name)) || '');
+          resolve(region || city ? { region, city } : null);
+        })
+        .catch(() => {
+          clearTimeout(timer);
+          resolve(null);
+        });
+    });
+
+  // ipinfo.io 带城市；ip.sb 作备用。两个并行，谁先给结果用谁，5.5 秒兜底。
   return new Promise((resolve) => {
-    let done = false;
+    let settled = false;
     const finish = (v) => {
-      if (done) return;
-      done = true;
-      geoCache = v;
-      resolve(v);
+      if (settled) return;
+      settled = true;
+      geoCache = v || { region: '', city: '' };
+      resolve(geoCache);
     };
-    const timer = setTimeout(() => finish({ region: '', city: '' }), 3000);
-    fetch('https://ipwho.is/?lang=zh-CN')
-      .then((r) => r.json())
-      .then((j) => {
-        clearTimeout(timer);
-        if (j && j.success) finish({ region: String(j.region || ''), city: String(j.city || '') });
-        else finish({ region: '', city: '' });
-      })
-      .catch(() => {
-        clearTimeout(timer);
-        finish({ region: '', city: '' });
-      });
+    [one('https://ipinfo.io/json', 5000), one('https://api.ip.sb/geoip', 5000)].forEach((p) =>
+      p.then((v) => {
+        if (v) finish(v);
+      }),
+    );
+    setTimeout(() => finish(null), 5500);
   });
 }
 
