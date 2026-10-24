@@ -5,6 +5,9 @@ shots/
 *.log
 .DS_Store
 
+# 21-30 班名单（含学号，学号就是初始密码）：只在本机做种子用，不提交、不部署
+tools/seed/
+
 tmp_*.cjs
 tools/push.mjs
 
